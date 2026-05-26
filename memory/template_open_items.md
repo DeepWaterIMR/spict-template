@@ -11,13 +11,15 @@ metadata:
 
 `scaffold.R` mechanically fills `{{STOCK_*}}` placeholders. It does NOT rewrite narrative prose, swap priors, or replace data. The following items are stock-specific surfaces that an analyst (human + AI in collaboration) must walk through before the assessment is usable.
 
+**The agent driving this should also read `template_scaffold_interview.md`**, which has the structured Q&A protocol for the data sections below.
+
 When you complete one of these for the current stock, add a memory file recording what you chose and why, then strike the item from this checklist (or replace this whole file once everything is done).
 
 ## Data
 
-- [ ] **Catch processing** (`src/1_process_catches.R`) — currently a worked example for beaked redfish (IMR DB + JRN-AFWG xlsx). Rewrite the data sources, species filters, and country allocation logic for your stock. Output contract: `data/catches/{{STOCK_NAME}}_catches_for_SPiCT.csv` with `year` and `total` columns at minimum.
-- [ ] **Survey indices** — drop the stock-specific indices RDS into `data/indices/` matching the path `{{STOCK_CODE}}-assessment-survey-indices.rds`. Long-format with `year`, `survey`, `est`, `lwr`, `upr`, `se` columns.
-- [ ] **Gear breakdown** for the advice sheet — `data/catches/landings_by_gear_pct_allNations.csv` (column convention inherited from reg-spict).
+- [ ] **Catch processing** (`src/1_process_catches.R`) — currently a worked example for beaked redfish (IMR DB + JRN-AFWG xlsx). Ask the analyst which catch sources apply (IMR landings DB, ICES working-group spreadsheet, StoX, bespoke country submissions, reconstructed historical series) and rewrite the script. Output contract: `data/catches/{{STOCK_NAME}}_catches_for_SPiCT.csv` with `year` and `total` columns at minimum. Record sources in a new `memory/catch_data_sources.md`.
+- [ ] **Survey indices** — drop the stock-specific indices `.rds` into `data/indices/{{STOCK_CODE}}-assessment-survey-indices.rds`. The file is a **named list of data frames** (e.g. "Total biomass", "Over 30 cm biomass", "Under 10 cm abundance"), one element of which is the assessment index. Required columns per frame: `year`, `est`, `lwr`, `upr`, `se`. **Ask the analyst for the URL of the index producer repo** (the IMR Deep-water pattern is one repo per species, e.g. `DeepWaterIMR/ref-assessment-index` for redfish) and pin a commit/tag in a new `memory/index_data_sources.md`. Confirm which `[[i]]` of the list is the chosen index — default is `[[2]]`, but this varies per stock.
+- [ ] **Gear breakdown** for the advice sheet — `data/catches/landings_by_gear_pct_allNations.csv` (column convention inherited from reg-spict; verify against the working group's reporting format).
 - [ ] **Landings file** for the advice sheet — `data/catches/{{STOCK_NAME}}_landings_for_SPiCT.csv` (semicolon-separated; columns include nations + `OtherNations`).
 
 ## Model configuration

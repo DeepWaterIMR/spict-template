@@ -42,7 +42,11 @@ scaffold <- function(config_path = "stock_config.yaml", dry = FALSE) {
 
   text_exts <- c("qmd", "R", "md", "css", "yaml", "yml", "toml", "csl", "bib", "Rmd", "txt", "lua")
 
-  exclude_dirs <- c(".git", "data", "docs", "figures",
+  # We exclude `.git/` (would corrupt the repo) and the analyst's reference
+  # folder. `data/`, `docs/`, `figures/` are NOT excluded — the README.md
+  # files in those dirs contain placeholders that need filling. The
+  # text-extension filter below protects binary data files.
+  exclude_dirs <- c(".git",
                     file.path("src", "example_advice_sheets"))
 
   # Meta-files about scaffolding itself — both contain literal `{{KEY}}`

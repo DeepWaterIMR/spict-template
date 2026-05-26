@@ -22,7 +22,17 @@ Research (Havforskningsinstituttet, Norway). Derived from the `reg-spict`
 
 ## Scaffolding a new stock project
 
-1. Create the new project from this template on GitHub:
+**This template is designed to be populated with an AI coding agent driving the
+process** (Claude Code, Cursor, Windsurf, ChatGPT in a workspace, etc.), in
+collaboration with the analyst. The agent is responsible for asking the
+analyst the right questions, filling `stock_config.yaml`, running the
+scaffolder, then walking the analyst through the data-onboarding steps and
+the open-items checklist. The full interview protocol lives in
+[`memory/template_scaffold_interview.md`](memory/template_scaffold_interview.md).
+
+### Recommended (agent-driven) flow
+
+1. Create the new project on GitHub:
 
    ```bash
    gh repo create DeepWaterIMR/<stock>-spict \
@@ -31,36 +41,58 @@ Research (Havforskningsinstituttet, Norway). Derived from the `reg-spict`
    cd <stock>-spict
    ```
 
-2. Fill in `stock_config.yaml`:
+2. Open the repo in your AI coding tool of choice and ask it:
 
-   ```yaml
-   STOCK_CODE:             reb           # ICES short code, lower-case
-   STOCK_NAME:             BeakedRedfish # CamelCase, used in file names
-   STOCK_NAME_LOWER_SNAKE: beaked_redfish
-   STOCK_LATIN:            Sebastes mentella
-   ICES_AREAS:             1, 2
-   ICES_STOCK_ID:          reb.27.1-2
-   ASSESSMENT_YEAR:        2026
-   ADVICE_YEAR:            2027
-   PREV_ADVICE_YEAR:       2024
-   FIRST_DATA_YEAR:        1987
-   WORKING_GROUP:          JRN-AFWG
-   ```
+   > "Help me scaffold this new SPiCT stock project. Read `AGENTS.md` and
+   > `memory/template_scaffold_interview.md`, then walk me through the
+   > questions."
 
-3. Run the scaffolder:
+   The agent should:
+   - Ask all 11 stock-identity fields (stock code, name, latin name, ICES
+     areas, ICES stock ID, assessment / advice / previous-advice years, first
+     data year, working group).
+   - Write `stock_config.yaml` and run `scaffold.R`.
+   - Ask about **catch data sources** — where do they live, how are they
+     combined, is there a gear breakdown — and rewrite `src/1_process_catches.R`
+     accordingly.
+   - Ask about **survey indices** — including a URL to the index producer repo
+     (e.g. [`DeepWaterIMR/ref-assessment-index`](https://github.com/DeepWaterIMR/ref-assessment-index)),
+     which split of the indices list to use, and how the `.rds` file gets into
+     `data/indices/`.
+   - Ask about **working-group conventions** — advice framework, reference
+     points, Word template, bibliography.
+   - Record every non-obvious decision as a new file in `memory/`.
 
-   ```r
-   source("scaffold.R")
-   scaffold("stock_config.yaml")
-   ```
+3. Walk through [`memory/template_open_items.md`](memory/template_open_items.md)
+   with the agent. Every item is a stock-specific surface (priors, narrative
+   prose, gear breakdown, bibliography, advice history) that needs revisiting
+   beyond the mechanical scaffolding step.
 
-   This does literal find-replace of `{{STOCK_CODE}}`, `{{STOCK_NAME}}`, etc.,
-   across every text file in the repo, and writes the resulting stock identity
-   to `memory/stock_identity.md`.
+### Manual fallback
 
-4. Walk through `memory/template_open_items.md`. Every item on that list is a
-   stock-specific surface (data sources, priors, gear breakdown, advice
-   framework, bibliography, narrative prose) that must be revisited.
+If you'd rather fill the config by hand:
+
+```yaml
+# stock_config.yaml
+STOCK_CODE:             reb
+STOCK_NAME:             BeakedRedfish
+STOCK_NAME_LOWER_SNAKE: beaked_redfish
+STOCK_LATIN:            Sebastes mentella
+ICES_AREAS:             1, 2
+ICES_STOCK_ID:          reb.27.1-2
+ASSESSMENT_YEAR:        2026
+ADVICE_YEAR:            2027
+PREV_ADVICE_YEAR:       2024
+FIRST_DATA_YEAR:        1987
+WORKING_GROUP:          JRN-AFWG
+```
+
+```r
+source("scaffold.R")
+scaffold("stock_config.yaml")
+```
+
+Then walk `memory/template_open_items.md` yourself.
 
 ## Repository layout
 

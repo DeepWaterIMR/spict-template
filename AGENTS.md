@@ -20,6 +20,29 @@ If you are reading this in the template itself (path ends `…/spict-template`),
 do not render the qmd documents — they contain `{{STOCK_NAME}}` and other
 unfilled placeholders.
 
+## 1a. New-stock onboarding (read this if scaffolding is incomplete)
+
+**Before anything else**, check whether this is a freshly scaffolded repo by
+running:
+
+```bash
+grep -r '{{[A-Z_]*}}' . --include='*.qmd' --include='*.R' --include='*.md' 2>/dev/null | head
+```
+
+If that returns any hits, the scaffolder has not been run yet and the repo is
+not assessment-ready. **Drive the analyst through the onboarding interview in
+`memory/template_scaffold_interview.md`** — ask them the questions listed
+there (stock identity, catch data sources, survey index producer repo,
+working-group conventions), fill `stock_config.yaml`, run
+`source("scaffold.R"); scaffold("stock_config.yaml")`, then proceed to
+`memory/template_open_items.md`. Record every non-trivial decision as a new
+file in `memory/` and sign it (see § 2).
+
+Do **not** try to render the qmd documents or "guess" plausible values for the
+analyst — onboarding is interactive by design. If the analyst doesn't know a
+value, write a memory file describing what's still open and ask them to
+follow up.
+
 ## 2. Project memory: `memory/`
 
 This folder is the **shared, committed, multi-agent project memory** for this
