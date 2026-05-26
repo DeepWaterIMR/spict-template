@@ -1,0 +1,997 @@
+---
+title: ""
+subtitle: ""
+format:
+  docx:
+    # TODO: Replace advice_template.docx with the JRN-AFWG-specific Word template
+    # when it becomes available. The current file is an ICES golden redfish template
+    # used as a structural placeholder only.
+    reference-doc: src/documents/advice_template.docx
+    number-sections: false
+    fig-width: 6.5
+    fig-height: 4
+    fig-dpi: 300
+    fig-align: left
+  # html:
+  #   embed-resources: true
+  #   css: src/documents/ices_advice.css
+  #   toc: true
+  #   toc-depth: 1
+  #   toc-title: "Contents"
+  #   fig-width: 7
+  #   fig-height: 4
+  #   fig-dpi: 150
+crossref:
+  fig-title: '**Figure**'
+  tbl-title: '**Table**'
+  title-delim: '**:**'
+bibliography: src/documents/zotero_library.bib
+# TODO: Replace nocite references with JRN-AFWG beaked redfish sources.
+# The references below are golden redfish / ICES AFWG placeholders.
+nocite: |
+  @ices-cat-1-2
+  @ices2023c
+  @ices2026-afwg
+csl: src/documents/ices_jms.csl
+execute:
+  echo: false
+  warning: false
+  message: false
+editor_options:
+  chunk_output_type: console
+output-file: "{{STOCK_NAME}} advice sheet"
+params:
+  assessment_year: 2026
+  advice_year: 2027
+  prev_advice: 0 # previous advice in tonnes
+---
+
+```{r setup}
+#| include: false
+source("src/0_setup.R")
+
+extra_pkgs <- c(
+  "officedown",
+  "officer",
+  "flextable",
+  "icesAdvice",
+  "cowplot",
+  "xml2",
+  "kableExtra"
+)
+to_install <- extra_pkgs[!extra_pkgs %in% rownames(installed.packages())]
+if (length(to_install)) {
+  install.packages(to_install)
+}
+invisible(lapply(extra_pkgs, function(p) {
+  suppressPackageStartupMessages(library(p, character.only = TRUE))
+}))
+
+page_width_in <- 6.7
+
+source("src/ices_plots.R")
+
+if (isTRUE(knitr::opts_knit$get("rmarkdown.pandoc.to") == "docx")) {
+  knitr::opts_chunk$set(out.width = "6.3in")
+}
+
+set_flextable_defaults(
+  font.family = "Calibri",
+  font.size = 9,
+  table.layout = "fixed",
+  border.color = "black",
+  background.color = "white",
+  big.mark = " ",
+  decimal.mark = ".",
+  padding = 2
+)
+
+fit_ft_page <- function(ft, max_width = page_width_in) {
+  col_widths <- ft$body$colwidths
+  total <- sum(col_widths)
+  if (length(total) == 1 && is.finite(total) && total > 0) {
+    scale <- max_width / total
+    ft <- flextable::width(
+      ft,
+      j = seq_along(col_widths),
+      width = col_widths * scale
+    )
+  }
+  flextable::set_table_properties(ft, layout = "fixed", width = 1)
+}
+
+ices_ft <- function(ft) {
+  ft |>
+    bg(bg = "#E8EAEA", part = "header") |>
+    border_inner(fp_border(color = "black", width = 0.5)) |>
+    border_outer(fp_border(color = "black", width = 0.75)) |>
+    font(fontname = "Calibri", part = "all") |>
+    fontsize(size = 9, part = "all") |>
+    align(align = "center", part = "header") |>
+    padding(padding = 2, part = "all") |>
+    autofit() |>
+    fit_ft_page()
+}
+
+ices_theme <- theme_bw(8) +
+  theme(
+    axis.title.y = element_text(face = "bold"),
+    axis.title.x = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    panel.grid.minor.y = element_blank(),
+    strip.background = element_blank(),
+    panel.background = element_blank(),
+    plot.background = element_blank(),
+    legend.background = element_blank(),
+    legend.box.background = element_blank(),
+    plot.margin = margin(t = 3, r = 5, b = 3, l = 3, unit = "pt")
+  )
+
+theme_set(ices_theme)
+```
+
+```{r data}
+if (!exists("params")) {
+  params <- list(assessment_year = 2026, advice_year = 2027, prev_advice = 0)
+}
+
+assessment_year <- params$assessment_year
+advice_year <- params$advice_year
+intermediate_year <- assessment_year
+prev_advice_catch <- params$prev_advice
+
+# Load the SPiCT summary object for the current assessment year.
+# Generated using 1 assessment model.qmd.
+# PLACEHOLDER: file will not exist until 1 assessment model.qmd has been run
+# with beaked redfish data.
+spict_summary <- readRDS(paste0(
+  "data/model_output/spict_summaries/sum_{{STOCK_NAME_LOWER_SNAKE}}_spict_",
+  assessment_year,
+  ".rds"
+))
+
+state_df <- as.data.frame(spict_summary$state)
+state_df$Quantity <- rownames(state_df)
+
+f_row <- grepl("/Fmsy$", state_df$Quantity)
+b_row <- grepl("/Bmsy$", state_df$Quantity)
+
+sq_yr_decimal <- regmatches(
+  state_df$Quantity[f_row],
+  regexpr("\\d+\\.\\d+", state_df$Quantity[f_row])
+)
+
+dec_re <- regexpr("\\d+\\.\\d+", state_df$Quantity)
+regmatches(
+  state_df$Quantity,
+  dec_re
+) <- as.character(ceiling(as.numeric(regmatches(state_df$Quantity, dec_re))))
+
+status_quo_F <- state_df$estimate[f_row]
+status_quo_B <- state_df$estimate[b_row]
+status_quo_F_lo <- state_df$cilow[f_row]
+status_quo_F_hi <- state_df$ciupp[f_row]
+status_quo_B_lo <- state_df$cilow[b_row]
+status_quo_B_hi <- state_df$ciupp[b_row]
+
+sq_yr_label <- sub(".*_(\\d+).*", "\\1", state_df$Quantity[f_row])
+
+f_status <- if (status_quo_F > 1) {
+  "above F~MSY~"
+} else {
+  "below F~MSY~"
+}
+
+b_status <- if (status_quo_B < 0.3) {
+  "below B~lim~"
+} else if (status_quo_B < 0.5) {
+  "below MSY B~trigger~ but above B~lim~"
+} else {
+  "above MSY B~trigger~"
+}
+
+advice_row <- spict_summary$manTable |>
+  dplyr::filter(stringr::str_detect(Scenario, "ICES advice rule"))
+
+advised_catch <- round(advice_row$C, 0)
+
+sq_row <- spict_summary$manTable |>
+  dplyr::filter(stringr::str_detect(Scenario, "Keep current F"))
+
+sq_catch_intermediate <- spict_summary$summary |>
+  dplyr::filter(year == intermediate_year) |>
+  dplyr::pull(Catch_pred.est) |>
+  round(0)
+
+last_data_year <- spict_summary$summary |>
+  dplyr::filter(!is.na(total_catch)) |>
+  dplyr::pull(year) |>
+  max() |>
+  floor()
+
+# PLACEHOLDER: BeakedRedfish_landings_for_SPiCT.csv currently holds golden
+# redfish data. Replace with beaked redfish landings before a real assessment.
+annual_catches <- read.csv(
+  "data/catches/{{STOCK_NAME}}_landings_for_SPiCT.csv",
+  sep = ";"
+) |>
+  as_tibble() |>
+  rename(Other = "OtherNations")
+
+first_data_year <- min(annual_catches$Year)
+
+# The xlsx contains both species. "s mentella" tab = beaked redfish catches.
+intl_catches_df <- readxl::read_xlsx(
+  "data/catches/Sebastes men and nor international catch from AFWG.xlsx",
+  sheet = "s mentella"
+) |>
+  dplyr::filter(!is.na(Total), Year >= 1989) |>
+  dplyr::mutate(Year = as.integer(Year))
+
+max_intl_yr <- max(intl_catches_df$Year)
+
+publication_line <- "Published X X X"
+
+# TODO: Update these links to JRN-AFWG beaked redfish resources.
+advice_doi <- "https://doi.org/PLACEHOLDER"
+download_url <- "https://standardgraphs.ices.dk/stockList.aspx"
+```
+
+::: {.callout-warning}
+## Exploratory assessment — not official advice
+
+This document is an **exploratory** SPiCT surplus-production model assessment
+of beaked redfish (*Sebastes mentella*) in ICES subareas 1 and 2. It is
+**not official JRN-AFWG advice** and should not be used as such. The
+official Joint Russian-Norwegian Working Group on Arctic Fisheries
+(JRN-AFWG) assessment uses the gadget3 age-structured model
+(<https://gadget-framework.github.io/>). Results here are supplementary
+and exploratory only.
+
+All catch data, survey indices, and prior values are currently
+**placeholders** (golden redfish data). The advice sheet template is also
+a placeholder (ICES golden redfish format) — replace with the JRN-AFWG
+Word template when available.
+:::
+
+# Advice on fishing opportunities
+
+ICES advises that when the MSY approach is applied, catches in `r advice_year` should be no more than `r format(advised_catch, big.mark = " ", scientific = FALSE)` tonnes.
+
+*[PLACEHOLDER — the advice framework above reflects the ICES MSY approach. Adapt to JRN-AFWG advice conventions when the official framework is confirmed.]*
+
+# Non-fisheries conservation considerations
+
+Conservation aspects and associated management measures may exist at a national or regional level but were not reviewed here.
+
+# Stock development over time
+
+Fishing pressure on the stock is estimated to be `r f_status`, and the exploitable stock size is `r b_status` (Figure 1).
+
+```{r}
+#| label: fig-advicesummary
+#| fig-cap: "Beaked redfish (*Sebastes mentella*) in Subareas 1 and 2. Summary of the stock assessment. Top: total catches (thousand tonnes). Bottom left: relative fishing pressure (F/F~MSY~) with 95% confidence intervals (shaded). Bottom right: relative exploitable biomass (B/B~MSY~) with 95% confidence intervals (shaded). [PLACEHOLDER — golden redfish data]"
+summary_plot(x = spict_summary, lang = "eng")
+```
+
+# Catch scenarios
+
+```{r}
+#| label: tbl-catchbasis
+#| tbl-cap: !expr 'paste0("Beaked redfish in Subareas 1 and 2. The basis for the catch scenarios in ", advice_year, ". The figures are rounded; calculations were done with unrounded inputs.")'
+basis_tb <- tibble::tibble(
+  Variable = c(
+    paste0("F", sq_yr_label, "/FMSY"),
+    paste0("B", advice_year, "/BMSY"),
+    paste0("Predicted catch ", intermediate_year, " (tonnes)")
+  ),
+  Value = c(
+    sprintf("%.2f", status_quo_F),
+    sprintf("%.2f", sq_row$`B/Bmsy`[1]),
+    format(sq_catch_intermediate, big.mark = " ", scientific = FALSE)
+  ),
+  Notes = c(
+    paste0(
+      "Fsq = Status quo fishing mortality (F",
+      sq_yr_decimal,
+      "/Fmsy) applied in ",
+      intermediate_year,
+      "."
+    ),
+    paste0(
+      "Short-term forecast (SPiCT) after fishing at Fsq in ",
+      intermediate_year,
+      "."
+    ),
+    paste0(
+      "SPiCT projection for ",
+      intermediate_year,
+      " at status quo F; in tonnes."
+    )
+  )
+)
+
+ft_basis <- flextable(basis_tb) |>
+  flextable::compose(
+    j = "Variable",
+    i = 1,
+    value = as_paragraph("F", as_sub(sq_yr_label), "/F", as_sub("MSY"))
+  ) |>
+  flextable::compose(
+    j = "Variable",
+    i = 2,
+    value = as_paragraph(
+      "B",
+      as_sub(as.character(advice_year)),
+      "/B",
+      as_sub("MSY")
+    )
+  ) |>
+  flextable::compose(
+    j = "Notes",
+    i = 1,
+    value = as_paragraph(
+      "F",
+      as_sub("sq"),
+      " = Status quo F (F",
+      as_sub(sq_yr_decimal),
+      "/F",
+      as_sub("MSY"),
+      ") applied in ",
+      as.character(intermediate_year),
+      "."
+    )
+  ) |>
+  flextable::compose(
+    j = "Notes",
+    i = 2,
+    value = as_paragraph(
+      "Short-term forecast (SPiCT) after fishing at F",
+      as_sub("sq"),
+      " in ",
+      as.character(intermediate_year),
+      "."
+    )
+  ) |>
+  ices_ft() |>
+  align(j = c("Variable", "Value"), align = "center", part = "all") |>
+  align(j = "Notes", align = "left", part = "all") |>
+  width(j = "Variable", width = 1.4) |>
+  width(j = "Value", width = 0.7) |>
+  width(j = "Notes", width = 4.6) |>
+  fit_ft_page()
+
+ft_basis
+```
+
+\newpage
+
+```{r}
+#| label: tbl-catchscenarios
+#| tbl-cap: !expr 'paste0("Beaked redfish (*Sebastes mentella*) in Subareas 1 and 2. Annual catch scenarios for ", advice_year, ". Catches are in tonnes.")'
+catch_col <- paste0("Total catch\n(", advice_year, ")")
+f_col <- paste0("Fishing\nmortality\nF", advice_year, "/FMSY")
+b_col <- paste0("Stock size\nB", advice_year + 1, "/BMSY")
+pct_bio_col <- "% biomass\nchange*"
+pct_adv_col <- "% advice\nchange**"
+
+b_current_fmt <- icesAdvice::icesRound(status_quo_B)
+fn_bio <- paste0(
+  "* Biomass ",
+  advice_year + 1,
+  " relative to biomass",
+  advice_year,
+  " (B",
+  advice_year,
+  "/BMSY = ",
+  b_current_fmt,
+  ")."
+)
+fn_adv <- if (prev_advice_catch > 0) {
+  paste0(
+    "** Advice for ",
+    intermediate_year,
+    " was ",
+    format(prev_advice_catch, big.mark = " ", scientific = FALSE),
+    " tonnes."
+  )
+} else {
+  paste0(
+    "** Advice for ",
+    intermediate_year,
+    " was 0 tonnes, and percent change cannot be calculated."
+  )
+}
+
+scenarios <- spict_summary$manTable |>
+  dplyr::select(Scenario, C, `B/Bmsy`, `F/Fmsy`) |>
+  dplyr::mutate(
+    pct_biomass_change = round((`B/Bmsy` / status_quo_B - 1) * 100, 0),
+    pct_advice_change = if (prev_advice_catch > 0) {
+      round((C / prev_advice_catch - 1) * 100, 0)
+    } else {
+      NA_real_
+    },
+    C = round(C, 0),
+    `B/Bmsy` = icesAdvice::icesRound(`B/Bmsy`),
+    `F/Fmsy` = icesAdvice::icesRound(`F/Fmsy`),
+    Basis = dplyr::case_when(
+      stringr::str_detect(Scenario, "ICES advice rule") ~ "Maximum sustainable yield (MSY) approach",
+      stringr::str_detect(Scenario, "Fish at Fmsy") ~ "F = FMSY",
+      stringr::str_detect(Scenario, "Keep current F") ~ "F = Fsq",
+      stringr::str_detect(Scenario, "No fishing") ~ "F = 0",
+      TRUE ~ Scenario
+    ),
+    Basis = factor(
+      Basis,
+      levels = c(
+        "Maximum sustainable yield (MSY) approach",
+        "F = FMSY",
+        "F = Fsq",
+        "F = 0"
+      )
+    )
+  ) |>
+  dplyr::arrange(Basis) |>
+  dplyr::select(
+    Basis, C, `F/Fmsy`, `B/Bmsy`, pct_biomass_change, pct_advice_change
+  ) |>
+  dplyr::rename(
+    !!catch_col := C,
+    !!f_col := `F/Fmsy`,
+    !!b_col := `B/Bmsy`,
+    !!pct_bio_col := pct_biomass_change,
+    !!pct_adv_col := pct_advice_change
+  )
+
+n_cols <- ncol(scenarios)
+make_group_row <- function(label) {
+  row <- as.list(rep(NA, n_cols))
+  names(row) <- names(scenarios)
+  row[["Basis"]] <- label
+  as_tibble(row)
+}
+
+scenarios_tbl <- dplyr::bind_rows(
+  make_group_row("Advice basis"),
+  scenarios[1, ],
+  make_group_row("Other scenarios"),
+  scenarios[2:nrow(scenarios), ]
+) |>
+  dplyr::mutate(dplyr::across(where(is.numeric), as.character))
+
+grp_rows <- which(
+  scenarios_tbl$Basis %in% c("Advice basis", "Other scenarios")
+)
+msy_row <- which(scenarios_tbl$Basis == levels(scenarios$Basis)[1])
+fmsy_row <- which(scenarios_tbl$Basis == "F = FMSY")
+fsq_row <- which(scenarios_tbl$Basis == "F = Fsq")
+f0_row <- which(scenarios_tbl$Basis == "F = 0")
+
+ft_sc <- flextable(scenarios_tbl) |>
+  flextable::compose(
+    part = "header", j = catch_col,
+    value = as_paragraph("Total catch\n(", as.character(advice_year), ")")
+  ) |>
+  flextable::compose(
+    part = "header", j = f_col,
+    value = as_paragraph("Fishing\nmortality\nF", as_sub(as.character(advice_year)), "/F", as_sub("MSY"))
+  ) |>
+  flextable::compose(
+    part = "header", j = b_col,
+    value = as_paragraph("Stock size\nB", as_sub(as.character(advice_year + 1)), "/B", as_sub("MSY"))
+  ) |>
+  flextable::compose(part = "header", j = pct_bio_col, value = as_paragraph("% biomass\nchange*")) |>
+  flextable::compose(part = "header", j = pct_adv_col, value = as_paragraph("% advice\nchange**")) |>
+  flextable::compose(part = "body", j = "Basis", i = msy_row,
+    value = as_paragraph("Maximum sustainable yield (MSY) approach")) |>
+  flextable::compose(part = "body", j = "Basis", i = fmsy_row,
+    value = as_paragraph("F = F", as_sub("MSY"))) |>
+  flextable::compose(part = "body", j = "Basis", i = fsq_row,
+    value = as_paragraph("F = F", as_sub("sq"))) |>
+  flextable::compose(part = "body", j = "Basis", i = f0_row,
+    value = as_paragraph("F = 0")) |>
+  flextable::merge_h(i = grp_rows, part = "body") |>
+  flextable::bold(i = grp_rows, part = "body") |>
+  flextable::bg(i = grp_rows, bg = "#F5F5F5", part = "body") |>
+  flextable::align(i = grp_rows, align = "left", part = "body") |>
+  flextable::colformat_char(j = pct_adv_col, na_str = "–") |>
+  ices_ft() |>
+  flextable::align(j = 2:n_cols, align = "center", part = "all") |>
+  flextable::align(j = "Basis", align = "left", part = "all") |>
+  flextable::width(j = "Basis", width = 3.0) |>
+  flextable::width(j = catch_col, width = 0.65) |>
+  flextable::width(j = f_col, width = 0.85) |>
+  flextable::width(j = b_col, width = 0.85) |>
+  flextable::width(j = pct_bio_col, width = 0.65) |>
+  flextable::width(j = pct_adv_col, width = 0.65) |>
+  fit_ft_page() |>
+  flextable::add_footer_lines(fn_bio) |>
+  flextable::add_footer_lines(fn_adv) |>
+  flextable::compose(
+    part = "footer", i = 1, j = 1,
+    value = as_paragraph(
+      "* Biomass ", as.character(advice_year + 1),
+      " relative to biomass ", as.character(advice_year),
+      " (B", as_sub(as.character(advice_year)), "/B", as_sub("MSY"), " = ", b_current_fmt, ")."
+    )
+  ) |>
+  flextable::fontsize(size = 8, part = "footer") |>
+  flextable::align(align = "left", part = "footer")
+
+ft_sc
+```
+
+# Basis of the advice
+
+```{r}
+#| label: tbl-advicebasis
+#| tbl-cap: "Beaked redfish in Subareas 1 and 2. The basis for the advice."
+advice_basis <- tibble::tibble(
+  Item = c("Advice basis", "Management plan"),
+  Description = c(
+    "MSY approach (ICES MSY hockey-stick advice rule with Blim and the 35th percentile of the catch distribution). [PLACEHOLDER — adapt to JRN-AFWG advice framework]",
+    "ICES is not aware of any agreed precautionary management plan for the stock. ICES MSY approach applied. [PLACEHOLDER — confirm JRN-AFWG management plan status]"
+  )
+)
+
+ft_basis2 <- flextable(advice_basis) |>
+  delete_part(part = "header") |>
+  flextable::compose(
+    j = "Description", i = 1,
+    value = as_paragraph(
+      "MSY approach (ICES MSY hockey-stick advice rule with B", as_sub("lim"),
+      " and 35th percentile of the catch distribution). [PLACEHOLDER]"
+    )
+  ) |>
+  bg(j = "Item", bg = "#E8EAEA", part = "body") |>
+  border_inner(fp_border(color = "black", width = 0.5)) |>
+  border_outer(fp_border(color = "black", width = 0.75)) |>
+  font(fontname = "Calibri", part = "all") |>
+  fontsize(size = 9, part = "all") |>
+  align(j = "Item", align = "left", part = "body") |>
+  align(j = "Description", align = "left", part = "body") |>
+  bold(j = "Item", part = "body") |>
+  width(j = "Item", width = 1.5) |>
+  width(j = "Description", width = 5.0) |>
+  fit_ft_page()
+
+ft_basis2
+```
+
+# Quality of the assessment
+
+**[PLACEHOLDER — rewrite this section once beaked redfish data and a confirmed model configuration are in place.]**
+
+This is an exploratory SPiCT surplus production model [@pedersen2017] fitted to total annual catches (`r first_data_year`–`r last_data_year`) and a biomass bottom-trawl survey index (`r spict_summary$summary |> dplyr::filter(!is.na(index)) |> dplyr::pull(year) |> floor() |> range() |> paste(collapse = "-")`). The model uses a fixed Schaefer shape, placeholder priors on initial biomass depletion and the intrinsic growth rate, and a catch standard-deviation multiplier reflecting estimated data quality. All data and priors are currently golden redfish placeholders.
+
+The official JRN-AFWG beaked redfish assessment is conducted with the gadget3 age-structured model (<https://gadget-framework.github.io/>).
+
+# Issues relevant for the advice
+
+**[PLACEHOLDER — replace with beaked redfish–specific stock issues.]**
+
+The exploratory advice is based on the ICES MSY framework using the 35th percentile of the projected catch distribution [@ices2020a]. Beaked redfish (*Sebastes mentella*) in ICES Subareas 1 and 2 is a long-lived, slow-growing species. Key issues expected to be relevant include:
+
+- Mixing of *S. mentella* and *S. norvegicus* in historical catch and survey records.
+- Population structure within ICES Subareas 1–2.
+- Uncertainty in historical catches.
+- Survey availability and representativeness.
+
+These should be reviewed against the most recent JRN-AFWG assessment report before updating this section.
+
+<!-- \newpage -->
+
+# Reference points
+
+```{r}
+#| label: tbl-refpoints
+#| tbl-cap: "Beaked redfish in Subareas 1 and 2. Reference points, values, and their technical basis. No absolute reference points are defined; the SPiCT model provides reference points on the relative scale only."
+ref_tb <- tibble::tibble(
+  Framework = c("MSY approach", "MSY approach", "Precautionary approach"),
+  `Reference point` = c("MSY Btrigger", "FMSY", "Blim"),
+  Value = c("B/BMSY = 0.5", "F/FMSY = 1", "B/BMSY = 0.3"),
+  `Technical basis` = c(
+    "Relative value from the SPiCT model. BMSY is estimated directly from the SPiCT assessment and changes when the assessment is updated.",
+    "Relative value from the SPiCT model. FMSY is estimated directly from the SPiCT assessment and changes when the assessment is updated.",
+    "Set at B/BMSY = 0.3 following ICES standard for SPiCT stocks (ICES, 2021)."
+  )
+)
+
+ft_ref <- flextable(ref_tb) |>
+  flextable::compose(i = 1, j = "Reference point", value = as_paragraph("MSY B", as_sub("trigger"))) |>
+  flextable::compose(i = 2, j = "Reference point", value = as_paragraph("F", as_sub("MSY"))) |>
+  flextable::compose(i = 3, j = "Reference point", value = as_paragraph("B", as_sub("lim"))) |>
+  flextable::compose(i = 1, j = "Value", value = as_paragraph("B/B", as_sub("MSY"), " = 0.5")) |>
+  flextable::compose(i = 2, j = "Value", value = as_paragraph("F/F", as_sub("MSY"), " = 1")) |>
+  flextable::compose(i = 3, j = "Value", value = as_paragraph("B/B", as_sub("MSY"), " = 0.3")) |>
+  flextable::compose(
+    i = 1, j = "Technical basis",
+    value = as_paragraph(
+      "Relative reference points from the SPiCT model. B", as_sub("MSY"),
+      " is estimated directly from the SPiCT assessment and changes when the assessment is updated."
+    )
+  ) |>
+  flextable::compose(
+    i = 2, j = "Technical basis",
+    value = as_paragraph(
+      "Relative reference points from the SPiCT model. F", as_sub("MSY"),
+      " is estimated directly from the SPiCT assessment and changes when the assessment is updated."
+    )
+  ) |>
+  flextable::compose(
+    i = 3, j = "Technical basis",
+    value = as_paragraph("Set at B/B", as_sub("MSY"), " = 0.3 following ICES standard for SPiCT stocks (ICES, 2021).")
+  ) |>
+  merge_at(i = 1:2, j = "Framework") |>
+  ices_ft() |>
+  align(j = c("Framework", "Reference point", "Value"), align = "center", part = "all") |>
+  align(j = "Technical basis", align = "left", part = "all") |>
+  width(j = "Framework", width = 1.15) |>
+  width(j = "Reference point", width = 1.15) |>
+  width(j = "Value", width = 1.05) |>
+  width(j = "Technical basis", width = 3.15) |>
+  fit_ft_page()
+
+ft_ref
+```
+
+# Basis of the assessment
+
+```{r}
+#| label: tbl-assbasis
+#| tbl-cap: "Beaked redfish in Subareas 1 and 2. Basis of the assessment and advice."
+ass_basis <- tibble::tibble(
+  Item = c(
+    "Stock data category",
+    "Assessment type",
+    "Input data",
+    "Discards",
+    "Other information",
+    "Working group"
+  ),
+  Description = c(
+    "PLACEHOLDER — confirm ICES stock data category for reb.27.1-2.",
+    "SPiCT surplus production model (Pedersen and Berg, 2017). Exploratory; official assessment uses gadget3.",
+    paste0(
+      "PLACEHOLDER — annual total landings from Norway, Russia, and other countries (",
+      first_data_year, "–", last_data_year,
+      "; data are golden redfish placeholders). ",
+      "Compiled spatiotemporal biomass survey index (PLACEHOLDER — golden redfish index). ",
+      "Scaled to its mean."
+    ),
+    "Discards are not included in the assessment; assumed negligible. [PLACEHOLDER — verify for beaked redfish]",
+    "PLACEHOLDER — describe benchmark / review history for beaked redfish SPiCT exploration.",
+    "Joint Russian-Norwegian Working Group on Arctic Fisheries (JRN-AFWG)."
+  )
+)
+
+ft_ass <- flextable(ass_basis) |>
+  delete_part(part = "header") |>
+  bg(j = "Item", bg = "#E8EAEA", part = "body") |>
+  border_inner(fp_border(color = "black", width = 0.5)) |>
+  border_outer(fp_border(color = "black", width = 0.75)) |>
+  font(fontname = "Calibri", part = "all") |>
+  fontsize(size = 9, part = "all") |>
+  align(j = "Item", align = "left", part = "body") |>
+  align(j = "Description", align = "left", part = "body") |>
+  bold(j = "Item", part = "body") |>
+  width(j = "Item", width = 1.84) |>
+  width(j = "Description", width = 4.66) |>
+  fit_ft_page()
+
+ft_ass
+```
+
+# History of the advice, catch, and management
+
+```{r}
+#| label: tbl-catchmanagement
+#| tbl-cap: !expr 'paste0("Beaked redfish in Subareas 1 and 2. History of catch and management. Catches in tonnes. [PLACEHOLDER — replace advice history with JRN-AFWG beaked redfish records]")'
+
+# PLACEHOLDER: This table covers only recent years as a structural placeholder.
+# Replace the ICES Advice strings with the actual JRN-AFWG beaked redfish advice
+# history, extending the Year range to match.
+# The annual-update task: extend `ICES Advice` when assessment_year advances.
+
+advice_start_year <- 2015  # PLACEHOLDER: set to first year with formal JRN-AFWG advice
+
+advice_mgmt <- tibble::tibble(
+  Year = c(advice_start_year:assessment_year, advice_year),
+  `ICES Advice` = c(
+    rep(
+      "PLACEHOLDER – replace with JRN-AFWG beaked redfish advice",
+      assessment_year - advice_start_year + 1
+    ),
+    "MSY approach (exploratory SPiCT)"  # advice_year
+  ),
+  `Catch corresponding\nto advice` = c(
+    rep(NA_real_, assessment_year - advice_start_year + 1),
+    advised_catch
+  ),
+  `Agreed TAC` = rep(NA_real_, advice_year - advice_start_year + 1)
+)
+
+est_catches <- spict_summary$summary |>
+  dplyr::filter(year == round(year, 0)) |>
+  dplyr::transmute(
+    Year = as.integer(floor(year)),
+    `Catches` = round(total_catch, 0)
+  )
+
+advice_mgmt <- advice_mgmt |> dplyr::left_join(est_catches, by = "Year")
+
+last_catch_row <- which(advice_mgmt$Year == last_data_year)
+
+ft_mgmt <- flextable(advice_mgmt) |>
+  colformat_int(j = "Year", big.mark = "") |>
+  colformat_double(
+    j = c("Catch corresponding\nto advice", "Agreed TAC", "Catches"),
+    big.mark = " ",
+    digits = 0,
+    na_str = "–"
+  ) |>
+  ices_ft() |>
+  align(j = "ICES Advice", align = "left", part = "all") |>
+  align(
+    j = c("Year", "Catch corresponding\nto advice", "Agreed TAC", "Catches"),
+    align = "center",
+    part = "all"
+  ) |>
+  width(j = "Year", width = 0.45) |>
+  width(j = "ICES Advice", width = 2.85) |>
+  width(j = "Catch corresponding\nto advice", width = 1.05) |>
+  width(j = "Agreed TAC", width = 0.9) |>
+  width(j = "Catches", width = 1.0) |>
+  fit_ft_page() |>
+  flextable::compose(
+    i = last_catch_row,
+    j = "Catches",
+    value = as_paragraph(
+      format(
+        advice_mgmt$Catches[last_catch_row],
+        big.mark = " ",
+        scientific = FALSE
+      ),
+      as_sup("*")
+    )
+  ) |>
+  flextable::add_footer_lines("* Preliminary") |>
+  flextable::fontsize(size = 8, part = "footer") |>
+  flextable::align(align = "left", part = "footer")
+
+ft_mgmt
+```
+
+\newpage
+
+```{r}
+#| label: tbl-gearfleet
+#| tbl-cap: !expr 'paste0("Beaked redfish in Subareas 1 and 2. Catch distribution by gear in ", max_intl_yr, " as estimated. [PLACEHOLDER — golden redfish gear data]")'
+gear_yr <- read.csv("data/catches/landings_by_gear_pct_allNations.csv") |>
+  dplyr::rename_with(tolower) |>
+  dplyr::filter(year == max_intl_yr)
+
+total_intl <- intl_catches_df |>
+  dplyr::filter(Year == max_intl_yr) |>
+  dplyr::pull(Total)
+total_fmt_intl <- formatC(round(total_intl, 0), format = "d", big.mark = " ")
+
+gear_total_nor <- sum(gear_yr$tonnes)
+gear_fmt_nor <- formatC(round(gear_total_nor, 0), format = "d", big.mark = " ")
+
+gear_cats <- gear_yr |>
+  dplyr::mutate(
+    cat = dplyr::case_when(
+      gear == "Gillnets" ~ "Gillnet",
+      gear == "Longlines" ~ "Longline",
+      gear == "Bottom trawls" ~ "Trawl",
+      TRUE ~ "Other gears"
+    )
+  ) |>
+  dplyr::group_by(cat) |>
+  dplyr::summarise(tonnes = sum(tonnes), .groups = "drop")
+
+pct_label <- function(gear) {
+  v <- gear_cats$tonnes[gear_cats$cat == gear]
+  sprintf("%.0f%% %s", v / gear_total_nor * 100, tolower(gear))
+}
+
+body_df <- data.frame(
+  col1 = c(paste0(total_fmt_intl, " tonnes"), ""),
+  col2 = c(pct_label("Gillnet"), paste0(gear_fmt_nor, " tonnes")),
+  col3 = c(pct_label("Longline"), ""),
+  col4 = c(pct_label("Trawl"), ""),
+  col5 = c(pct_label("Other gears"), ""),
+  col6 = c("Assumed to be negligible", ""),
+  col7 = c("Unknown", ""),
+  stringsAsFactors = FALSE
+)
+
+flextable(body_df) |>
+  set_header_labels(
+    col1 = paste0("Total commercial catch (", max_intl_yr, ")"),
+    col2 = "Commercial landings",
+    col3 = "Commercial landings",
+    col4 = "Commercial landings",
+    col5 = "Commercial landings",
+    col6 = "Discards",
+    col7 = "Recreational fisheries"
+  ) |>
+  ices_ft() |>
+  merge_h(part = "header") |>
+  merge_at(i = 1:2, j = 1, part = "body") |>
+  merge_at(i = 1:2, j = 6, part = "body") |>
+  merge_at(i = 1:2, j = 7, part = "body") |>
+  merge_at(i = 2, j = 2:5, part = "body") |>
+  align(align = "center", part = "all") |>
+  valign(valign = "center", part = "body")
+```
+
+\newpage
+
+```{r}
+#| label: tbl-catchhistory
+#| tbl-cap: !expr 'paste0("Beaked redfish (*Sebastes mentella*) in Subareas 1 and 2. History of estimated commercial catches (tonnes) by country, 1989–", max_intl_yr, ". The most recent year is preliminary. [PLACEHOLDER — verify column names against s mentella tab]")'
+catch_hist <- intl_catches_df |>
+  dplyr::mutate(
+    uk_pre = dplyr::if_else(
+      "UK (Eng. & Wales)" %in% names(intl_catches_df),
+      `UK (Eng. & Wales)`,
+      NA_real_
+    ),
+    uk_post = dplyr::if_else(Year >= 2000, UK, NA_real_)
+  ) |>
+  dplyr::transmute(
+    Year = dplyr::if_else(
+      Year == max_intl_yr,
+      paste0(Year, "*"),
+      as.character(Year)
+    ),
+    Norway,
+    Russia,
+    Total
+  )
+
+ft_catch <- flextable(catch_hist) |>
+  colformat_char(j = "Year") |>
+  colformat_double(
+    j = 2:(ncol(catch_hist)),
+    big.mark = " ",
+    digits = 0,
+    na_str = "–"
+  ) |>
+  ices_ft() |>
+  fontsize(size = 7, part = "all") |>
+  align(align = "center", part = "all") |>
+  autofit() |>
+  fit_ft_page() |>
+  add_footer_lines("* Preliminary figures.") |>
+  add_footer_lines(
+    "NOTE: Column set is a placeholder. Verify against the 's mentella' tab in the xlsx for the full country breakdown."
+  ) |>
+  fontsize(size = 7, part = "footer") |>
+  padding(padding = 1, part = "footer")
+
+ft_catch
+```
+
+\newpage
+
+# Summary of the assessment
+
+```{r}
+#| label: tbl-assessmentsummary
+#| tbl-cap: Beaked redfish in Subareas 1 and 2. SPiCT assessment summary. Relative exploitable biomass (B/B~MSY~), total catch (tonnes), and relative fishing mortality (F/F~MSY~), with 95% confidence intervals (low and high). [PLACEHOLDER — golden redfish data]
+assess_tb <- spict_summary$summary |>
+  dplyr::filter(year == round(year, 0), year < advice_year) |>
+  dplyr::transmute(
+    Year = as.integer(floor(year)),
+    `B/BMSY (low)` = round(exp(BBmsy.ll), 2),
+    `B/BMSY` = round(exp(BBmsy.est), 2),
+    `B/BMSY (high)` = round(exp(BBmsy.ul), 2),
+    `Catch (t)` = round(total_catch, 0),
+    `F/FMSY (low)` = dplyr::if_else(
+      Year < assessment_year, round(exp(FFmsy.ll), 2), NA_real_
+    ),
+    `F/FMSY` = dplyr::if_else(
+      Year < assessment_year, round(exp(FFmsy.est), 2), NA_real_
+    ),
+    `F/FMSY (high)` = dplyr::if_else(
+      Year < assessment_year, round(exp(FFmsy.ul), 2), NA_real_
+    )
+  )
+
+ft_ass_sum <- flextable(assess_tb) |>
+  colformat_int(j = 1, big.mark = "") |>
+  colformat_double(j = 2:4, digits = 2, big.mark = "") |>
+  colformat_double(j = 5, digits = 0, big.mark = " ") |>
+  colformat_double(j = 6:8, digits = 2, big.mark = "", na_str = "–") |>
+  flextable::compose(j = "B/BMSY (low)", part = "header",
+    value = as_paragraph("B/B", as_sub("MSY"), "\n(low)")) |>
+  flextable::compose(j = "B/BMSY", part = "header",
+    value = as_paragraph("B/B", as_sub("MSY"))) |>
+  flextable::compose(j = "B/BMSY (high)", part = "header",
+    value = as_paragraph("B/B", as_sub("MSY"), "\n(high)")) |>
+  flextable::compose(j = "F/FMSY (low)", part = "header",
+    value = as_paragraph("F/F", as_sub("MSY"), "\n(low)")) |>
+  flextable::compose(j = "F/FMSY", part = "header",
+    value = as_paragraph("F/F", as_sub("MSY"))) |>
+  flextable::compose(j = "F/FMSY (high)", part = "header",
+    value = as_paragraph("F/F", as_sub("MSY"), "\n(high)")) |>
+  ices_ft() |>
+  align(align = "center", part = "all") |>
+  fit_ft_page()
+
+ft_ass_sum
+```
+
+\newpage
+
+# Sources and references
+
+::: {#refs}
+:::
+
+```{r}
+#| results: asis
+if (!knitr::is_latex_output()) {
+  # TODO: Update citation text for JRN-AFWG beaked redfish once official
+  # assessment documents are available.
+  citation_pre <- paste0(
+    "Recommended citation: ICES. ",
+    assessment_year,
+    ". Beaked redfish (",
+    "Sebastes mentella",
+    ") in subareas 1 and 2 (Northeast Arctic). "
+  )
+  citation_post <- paste0(
+    " Report of the ICES Advisory Committee, ",
+    assessment_year,
+    ". ICES Advice ",
+    assessment_year,
+    ", reb.27.1-2, ",
+    advice_doi
+  )
+
+  cite_txt <- officer::fp_text(font.family = "Calibri", font.size = 9)
+  cite_txt_italic <- officer::fp_text(
+    font.family = "Calibri", font.size = 9, italic = TRUE
+  )
+
+  box_border <- officer::fp_border(color = "black", width = 0.75)
+
+  ft_box <- flextable::flextable(tibble::tibble(content = c("link", "citation"))) |>
+    flextable::delete_part(part = "header") |>
+    flextable::compose(
+      i = 1, j = "content",
+      value = flextable::as_paragraph(flextable::hyperlink_text(
+        "Download the stock assessment data and figures\n",
+        url = if (nzchar(download_url)) download_url else advice_doi,
+        props = officer::fp_text(
+          color = "#0B58CA", underlined = TRUE,
+          font.family = "Calibri", font.size = 9
+        )
+      ))
+    ) |>
+    flextable::compose(
+      i = 2, j = "content",
+      value = flextable::as_paragraph(
+        flextable::as_chunk(citation_pre, props = cite_txt),
+        flextable::as_chunk("In", props = cite_txt_italic),
+        flextable::as_chunk(citation_post, props = cite_txt)
+      )
+    ) |>
+    flextable::border_remove() |>
+    flextable::border_outer(border = box_border, part = "body") |>
+    flextable::padding(
+      padding.top = 6, padding.bottom = 6,
+      padding.left = 6, padding.right = 6, part = "body"
+    ) |>
+    flextable::align(align = "left", part = "body") |>
+    flextable::width(j = "content", width = page_width_in)
+
+  ft_box
+}
+```

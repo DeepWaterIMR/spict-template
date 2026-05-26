@@ -1,0 +1,42 @@
+# R / IDE artifacts
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+*.Rproj
+
+# OS / editor artifacts
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+~$*
+
+# Quarto / R Markdown intermediates
+*_cache/
+*_files/
+*.log
+*.rmarkdown
+/.quarto/
+**/*.quarto_ipynb
+
+# Large generated outputs
+/data/model_output/saved_models/
+/data/model_output/spict_summaries/
+/docs/model_exploration_reports/*.html
+/docs/model_comparisons/*.html
+
+# Quarto output (except official assessment deliverables)
+*.html
+*.pdf
+*.docx
+!docs/assessment/**/*.html
+!docs/assessment/**/*.pdf
+!docs/assessment/**/*.docx
+!src/documents/advice_template.docx
+
+# Generated figures (drop-zone for assessment plots)
+/figures/*
+!/figures/README.md

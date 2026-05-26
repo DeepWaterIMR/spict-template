@@ -1,0 +1,326 @@
+---
+format: 
+  html:
+    embed-resources: true
+    theme: cosmo
+    toc: true
+    toc-depth: 3
+    toc-expand: true
+execute:
+  echo: false
+  warning: false
+  message: false
+params:
+  description: NULL
+  models: NULL
+  model_directory: NULL
+---
+
+```{r knit-setup, eval = TRUE, include = FALSE, cache = FALSE}
+
+knitr::opts_knit$set(root.dir = '../../')
+
+knitr::knit_hooks$set(
+  timeit = local({
+    now = NULL
+    function(before, options) {
+      if (before) {
+        now <<- Sys.time()
+      } else {
+        res = round(difftime(Sys.time(), now, units = "mins"), 1)
+        now <<- NULL
+        # use options$label if you want the chunk label as well
+        print(paste('Time:', as.character(res), "min"))
+      }
+    }
+  })
+)
+```
+
+
+```{r params}
+# Access parameters
+description <- params$description
+models <- params$models
+model_dir <- params$model_directory
+
+cat(description, "\n")
+```
+
+```{r additionalfuncs}
+# Additional spict functions
+source("src/exploration/additional_spict_funcs.R")
+```
+
+
+```{r collectmodels}
+
+ms <- lapply(models, function(m) {
+  cat("Loading model:", m, "\n")
+  out <- readRDS(file.path(model_dir, paste0("res_", m, ".rds")))
+  attributes(out)$model_name <- m
+  return(out)
+})
+
+names(ms) <- models
+
+# for (m in models) {
+#   assign(
+#     x = paste0("res_", m),
+#     value = get(load(paste0("_saved_models/", "res_", m, ".rda")))
+#   )
+# }
+
+# ms_n <- map(models, ~ paste0("res_", .x))
+
+# ms <- setNames(lapply(ms_n, get), ms_n)
+
+```
+
+# Models convergence
+
+```{r convergence}
+good_ms <- sapply(seq_along(ms), function(i) {
+  m <- ms[[i]]
+  conv <- as.character(m$opt$convergence)
+  cat("Model:", names(ms)[i], "-> convergence:", conv, "\n")
+
+  if (conv == "0") {
+    return(names(ms)[i])
+  }
+})
+
+ms <- ms[good_ms]
+ms_n <- names(ms)
+model_names <- sub("res_", "", ms_n)
+gg_cols <- scales::hue_pal()(length(ms_n))
+
+# good_ms <- list()
+
+# for (mn in ms_n) {
+#   fit <- ms[[mn]]
+#   conv <- as.character(fit$opt$convergence)
+
+#   if (conv == "0") {
+#     good_ms[[mn]] <- fit
+#   }
+
+#   cat(mn, "-> convergence:", conv, "\n")
+# }
+
+# ms <- good_ms
+# ms_n <- names(ms)
+
+```
+
+
+# Plotspict compare
+
+```{r plotspictgeneral}
+tryCatch(
+  {
+    plotspict.compare(ms, col = gg_cols)
+    plotspict.compare(ms, CI = 0, col = gg_cols)
+  },
+  error = function(e) {
+    message("\n An error occurred:\n", e$message)
+  }
+)
+```
+
+## Biomass
+
+```{r biomass}
+tryCatch(
+  {
+    plotspict.compare(ms, varname = "B", plot.legend = 2, col = gg_cols)
+    plotspict.compare(ms, varname = "B", CI = 0, col = gg_cols)
+    plotspict.compare(ms, varname = "BBmsy", plot.legend = 2, col = gg_cols)
+    plotspict.compare(ms, varname = "BBmsy", CI = 0, col = gg_cols)
+  },
+  error = function(e) {
+    message("\n An error occurred:\n", e$message)
+  }
+)
+```
+
+## Fishing mortality
+
+```{r fmortality}
+tryCatch(
+  {
+    plotspict.compare(ms, varname = "F", col = gg_cols)
+    plotspict.compare(ms, varname = "F", CI = 0, col = gg_cols)
+    plotspict.compare(ms, varname = "FFmsy", col = gg_cols)
+    plotspict.compare(ms, varname = "FFmsy", CI = 0, col = gg_cols)
+  },
+  error = function(e) {
+    message("\n An error occurred:\n", e$message)
+  }
+)
+```
+
+## Catch and Production
+
+```{r catchandprod}
+tryCatch(
+  {
+    plotspict.compare(ms, varname = "C", col = gg_cols)
+    plotspict.compare(ms, varname = "C", CI = 0, col = gg_cols)
+    plotspict.compare(ms, varname = "P", col = gg_cols)
+    plotspict.compare(ms, varname = "P", CI = 0, col = gg_cols)
+  },
+  error = function(e) {
+    message("\n An error occurred:\n", e$message)
+  }
+)
+```
+
+# Reference points
+
+## MSY
+
+```{r msy}
+rp_vars <- c("logMSY")
+
+comp_plot(ms = ms, variables = rp_vars)
+
+```
+
+## Bmsy
+
+```{r bmsy}
+rp_vars <- c('logBmsy')
+
+comp_plot(ms = ms, variables = rp_vars)
+```
+
+## Fmsy
+
+```{r fmsy}
+rp_vars <- c('logFmsy')
+
+comp_plot(ms = ms, variables = rp_vars)
+
+```
+
+# State of the stock
+
+## Final year biomass
+
+```{r bbmsy}
+rp_vars <- c("logBlBmsy")
+
+comp_plot(ms = ms, variables = rp_vars)
+```
+
+```{r bl}
+rp_vars <- c("logBl")
+
+comp_plot(ms = ms, variables = rp_vars)
+```
+
+## Final year fishing mortality
+
+```{r ffmsy}
+rp_vars <- c("logFlFmsy")
+comp_plot(ms = ms, variables = rp_vars)
+```
+
+```{r fl}
+rp_vars <- c("logFl")
+comp_plot(ms = ms, variables = rp_vars)
+```
+
+# Important parameters
+
+## BKfrac
+
+```{r bkfrac}
+rp_vars <- c("logbkfrac")
+comp_plot(ms = ms, variables = rp_vars)
+```
+
+## n
+
+```{r logn}
+rp_vars <- c("logn")
+comp_plot(ms = ms, variables = rp_vars)
+```
+
+## r
+
+```{r logr}
+rp_vars <- c("logr")
+comp_plot(ms = ms, variables = rp_vars)
+```
+
+## K
+
+```{r logK}
+rp_vars <- c("logK")
+comp_plot(ms = ms, variables = rp_vars)
+```
+
+# Standard deviation values
+
+## sdc
+
+```{r sdc}
+sd_values <- c("logsdc")
+comp_plot(ms = ms, variables = sd_values)
+```
+
+## sdi
+
+```{r sdi}
+sd_values <- c("logsdi")
+comp_plot(ms = ms, variables = sd_values)
+```
+
+## sdb
+
+```{r sdb}
+sd_values <- c("logsdb")
+comp_plot(ms = ms, variables = sd_values)
+```
+
+## sdf
+
+```{r sdf}
+sd_values <- c("logsdf")
+comp_plot(ms = ms, variables = sd_values)
+
+```
+
+## alpha
+
+```{r alpha}
+sd_values <- c("logalpha")
+comp_plot(ms = ms, variables = sd_values)
+```
+
+## beta
+
+```{r beta}
+sd_values <- c("logbeta")
+comp_plot(ms = ms, variables = sd_values)
+```
+
+# Catch observed vs fitted
+
+Observed catches are extracted from the first model in the list.
+
+```{r obscatch}
+comp_plot2(ms = ms, variables = c("logCpred"))
+```
+
+# Index observed vs fitted
+
+Observed index is extracted from the first model in the list.
+
+```{r obsindex}
+comp_plot2(ms = ms, variables = c("logIpred"))
+```
+
+

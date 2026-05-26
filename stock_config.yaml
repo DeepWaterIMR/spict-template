@@ -1,0 +1,22 @@
+# Per-stock values consumed by scaffold.R.
+#
+# Fill in this file for your stock, then run:
+#   source("scaffold.R"); scaffold("stock_config.yaml")
+#
+# scaffold.R does a literal text find-replace of {{KEY}} → VALUE across every
+# .qmd, .R, .md, .css, .yaml, .toml file in the repo. Binary files (.docx,
+# .xlsx, .rds, images) are left alone.
+#
+# The example values below are for beaked redfish. Replace them.
+
+STOCK_CODE:             reb                 # ICES short code, lower-case
+STOCK_NAME:             BeakedRedfish       # CamelCase, used in file names and titles
+STOCK_NAME_LOWER_SNAKE: beaked_redfish      # snake_case, used in model RDS names
+STOCK_LATIN:            Sebastes mentella   # binomial, no italics markers
+ICES_AREAS:             1, 2                # comma-separated subarea numbers
+ICES_STOCK_ID:          reb.27.1-2          # full ICES stock identifier
+ASSESSMENT_YEAR:        2026                # year the assessment is conducted
+ADVICE_YEAR:            2027                # year for which advice is given
+PREV_ADVICE_YEAR:       2024                # year advice was last given
+FIRST_DATA_YEAR:        1987                # first year in the catch series
+WORKING_GROUP:          JRN-AFWG            # working group identifier
