@@ -90,6 +90,7 @@ make_table <- function(
     tmp %>%
       knitr::kable(
         format = "latex",
+        caption = caption,
         booktabs = TRUE,
         longtable = TRUE,
         row.names = FALSE,
@@ -97,6 +98,6 @@ make_table <- function(
         format.args = list(big.mark = ""),
         digits = digits
       ) %>%
-      kableExtra::kable_styling(latex_options = c("striped"))
+      kableExtra::kable_styling(latex_options = c("striped", "hold_position"))
   }
 }
