@@ -3,7 +3,7 @@
 # 🐟 spict-template — Run SPiCT stock assessments with AI agents
 
 <!-- version -->
-**Version 0.1.0** (2026-09-09)
+**Version 0.2.0** (2026-09-09)
 <!-- /version -->
 
 **Teach your AI coding agent to run a biomass-dynamic stock assessment — from catch series to catch advice — for any stock, on your own machine.**
