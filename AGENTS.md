@@ -1,171 +1,155 @@
-# AGENTS.md — contract for AI agents working in this repository
+# AGENTS.md — spict-template
 
-This file is the single source of truth for any LLM-based agent (Claude Code,
-Cursor, Windsurf, ChatGPT, Copilot, custom agents) working on this repo,
-alongside human collaborators. **Read this file before doing anything else.**
+You are helping a scientist at the **Institute of Marine Research** (IMR /
+Havforskningsinstituttet, Norway) run a **SPiCT** stock assessment — the Surplus Production
+model in Continuous Time of **Pedersen & Berg (2017)**, *Fish and Fisheries*
+([doi:10.1111/faf.12174](https://doi.org/10.1111/faf.12174)) — and turn it into a
+working-group chapter and a catch advice sheet. You write **R** with **tidyverse** syntax and
+**Quarto** documents.
 
-If a tool-specific file (`CLAUDE.md`, `.cursorrules`, etc.) contradicts this
-file, fix the tool-specific file rather than ignoring `AGENTS.md`.
+> This is the entry point for **Codex, Cursor, Gemini CLI, Mistral, and other agents**.
+> Claude Code reads the equivalent pointer in [`CLAUDE.md`](CLAUDE.md). Keep substantive
+> guidance in sync while preserving agent-specific setup notes.
 
 ---
 
-## 1. What this repo is
+## What spict-template is
 
-A SPiCT (Surplus Production model in Continuous Time) stock assessment project
-for the Deep-water species and cartilaginous fish group at the Institute of
-Marine Research (Havforskningsinstituttet, Norway), scaffolded from
-`DeepWaterIMR/spict-template`.
+A **vendor-neutral knowledge pack** — not a trained model, and not a repository you fill in
+place. It teaches an agent to run a SPiCT assessment for a chosen stock, and it **generates a
+new project folder** for that stock. You learn the method by *reading this repo at runtime*.
 
-If you are reading this in the template itself (path ends `…/spict-template`),
-do not render the qmd documents — they contain `{{STOCK_NAME}}` and other
-unfilled placeholders.
+spict-template sits **on top of**
+[academic-writing](https://github.com/DeepWaterIMR/academic-writing), which owns the project
+layout, the writing style, the document conventions, and the rendering pipeline. The dependency
+is real: `scaffold.R` here calls academic-writing's `scaffold_document()` and overlays the SPiCT
+layer on what it produces. If academic-writing is not installed, install it first
+(`install https://github.com/DeepWaterIMR/academic-writing`).
 
-## 1a. New-stock onboarding (read this if scaffolding is incomplete)
-
-**Before anything else**, check whether this is a freshly scaffolded repo by
-running:
-
-```bash
-grep -r '{{[A-Z_]*}}' . --include='*.qmd' --include='*.R' --include='*.md' 2>/dev/null | head
-```
-
-If that returns any hits, the scaffolder has not been run yet and the repo is
-not assessment-ready. **Drive the analyst through the onboarding interview in
-`memory/template_scaffold_interview.md`** — ask them the questions listed
-there (stock identity, catch data sources, survey index producer repo,
-working-group conventions), fill `stock_config.yaml`, run
-`source("scaffold.R"); scaffold("stock_config.yaml")`, then proceed to
-`memory/template_open_items.md`. Record every non-trivial decision as a new
-file in `memory/` and sign it (see § 2).
-
-Do **not** try to render the qmd documents or "guess" plausible values for the
-analyst — onboarding is interactive by design. If the analyst doesn't know a
-value, write a memory file describing what's still open and ask them to
-follow up.
-
-## 2. Project memory: `memory/`
-
-This folder is the **shared, committed, multi-agent project memory** for this
-repo. Every collaborator and every agent reads and writes here.
-
-### Read first
-
-At the start of any non-trivial task, read `memory/MEMORY.md` (the index) and
-load the entries relevant to your task. The index is short by design — scan it.
-
-### Write when you learn something non-obvious
-
-When you make a decision, calibrate a value, learn how a data source is
-shaped, or discover a non-obvious constraint, save it as a new file in
-`memory/`:
-
-```markdown
----
-name: <kebab-case-slug>
-description: <one-line summary>
-metadata:
-  type: project | reference | feedback | decision
-  author: <agent or person name>
-  created: YYYY-MM-DD
 ---
 
-<the fact, in markdown>
+## ⛔ Confidentiality — keep in mind on every task
 
-**Why**: <reasoning>
-**How to apply**: <when this matters for future work>
+Catch data can be commercially sensitive, and Norwegian sales-note data carry confidentiality
+constraints. **This repo is public and must contain no data and no private information.**
 
-Related: [[other-memory-slug]]
-```
+1. **Never commit data or private paths into spict-template.** No catch series, no index files,
+   no local absolute paths (`/Users/...`, `OneDrive`, `CloudStorage`). Templates use
+   **placeholders and code**, never data.
+2. Real data lives only in the **generated project folder**, and even there `data/`, `logs/`,
+   `figures/`, and `ai/review/` are git-ignored.
+3. **Generated projects default to a local repository with no remote.** Making one public is a
+   decision the analyst takes after reviewing whether the catch series can be published.
+4. **Default to derived outputs.** Model parameters, reference points, and status trajectories
+   are generally shareable; raw catch records by vessel are not.
 
-Then add a one-line pointer to `memory/MEMORY.md` (newest at the bottom).
+If a request would breach any of the above, stop and explain rather than comply.
 
-### What belongs in project memory (commit it)
+---
 
-- Calibration decisions (priors chosen, breakpoints set, why)
-- Data provenance (where each file came from, format quirks)
-- Constraints discovered the hard way
-- Cross-cutting style decisions specific to this stock
-- Open items still needing work
+## Working across projects
 
-### What does NOT belong in project memory
+spict-template is installed **once per machine** and used to spin up **many** stock projects —
+not cloned into each one. When set up via `spict-install`, its location is saved to
+`~/.spict-template/config.json` and its skills are copied into the agent's user-level skills
+folder (`~/.claude/skills/` for Claude Code, `~/.codex/skills/` for Codex).
 
-- Personal preferences (those go to your user-level memory: `~/.claude/projects/.../memory/` for Claude Code, equivalent for other tools)
-- Code structure (already visible in the repo)
-- Information already in git history
-- Anything truly transient to a single session
+- **Trigger:** the user asks to *"set up the `<year>` SPiCT assessment for `<stock>`"*, or to
+  fit, explore, or report a SPiCT assessment.
+- **If spict-template isn't installed yet**, run `skills/spict-install/SKILL.md` first.
+- **Never install at a filesystem root or a system directory.** Refuse and suggest a safe
+  user-space location.
 
-### Multi-agent rules
+---
 
-- **Sign your work**: set `metadata.author` to a stable identifier (e.g.
-  `claude-code-mikko`, `cursor-anna`, `human-mikko`). This is the audit
-  trail; preserve it on edits.
-- **Don't silently delete other agents' memories**: if a memory looks wrong,
-  add a correction memory linking back to it (`Supersedes: [[old-slug]]`)
-  rather than removing it. Wholesale deletion needs human sign-off in a PR.
-- **Don't duplicate**: before writing a new memory, grep `memory/` for the
-  topic — if a relevant file exists, update it instead.
+## How to work — capability router
 
-## 3. Hard constraints
+| If the user wants to… | Read |
+|---|---|
+| Install / set up spict-template | `skills/spict-install/SKILL.md` |
+| Update it (git pull + re-sync skills) | `skills/spict-update/SKILL.md` |
+| **Start** a new assessment (questionnaire → scaffold) | `skills/spict-new-assessment/SKILL.md` |
+| **Step 1** — compile the catches and the index | `skills/spict-compile-data/SKILL.md` |
+| **Step 2** — fit the model and write the assessment | `skills/spict-fit-model/SKILL.md` |
+| **Step 3** — explore alternatives, benchmark, compare | `skills/spict-explore/SKILL.md` |
+| **Step 4** — the working-group chapter | `skills/spict-assessment-report/SKILL.md` |
+| **Step 5** — the advice sheet | `skills/spict-advice-sheet/SKILL.md` |
+| Render (review first, screen sessions, toggles) | `skills/spict-render/SKILL.md` |
 
-### 3.1 Byte-identical output on `2 advice sheet.qmd`
+Shared knowledge lives in `knowledge/`:
 
-Once this repo is producing official-track advice, **`2 advice sheet.qmd` must
-render byte-for-byte identical numeric output before and after any change**.
-Only cosmetic or provably functionally-equivalent edits. Before editing, verify
-the replacement evaluates to the same value for the current `assessment_year`
-and `advice_year`.
+- `workflow.md` — the five steps and what each one settles.
+- `spict.md` — **the model conventions.** Tonnes, index timing and scaling, `stdevfac`
+  vectors, fixed `logn`, deactivated coupling priors, priors, the uncertainty ramp, reference
+  points, management scenarios. Reproduce these exactly.
+- `catch-data.md` — where catches come from, what has to be settled, and the sanity checks.
+- `indices.md` — the index contract, the variants, timing, and provenance.
+- `diagnostics.md` — the WKLIFE acceptance checklist and how to report a failure honestly.
+- `advice.md` — from a fit to the chapter and the advice sheet.
+- `constraints.md` — **the three hard rules.** Read before editing any document.
+- `project-structure.md` — the generated project's layout and `config.yaml` fields.
+- `academic-writing.md` — the shared contract with academic-writing.
+- `packages.md` — the package ecosystem and how to install `spict`.
+- `rendering.md` — rendering, caching toggles, long renders, common failures.
 
-This is inherited from `reg-spict`. See `memory/template_constraints.md`.
+---
 
-### 3.2 Exploratory-status callouts
+## Golden rules
 
-Both production qmds carry a prominent callout stating they are exploratory
-SPiCT supplements (where applicable to the working group's gadget-based
-official assessment). Do not remove or soften these notices without explicit
-human authorisation recorded in `memory/`.
+1. **Read the method first.** Before writing model code, read `knowledge/spict.md` and the
+   SPiCT guidelines (<https://github.com/DTUAqua/spict>). Do not guess the API.
+2. **Use the helpers, don't reinvent them.** `build_spict_input()`, `catch_stdevfac()`,
+   `spictRisk()`, `acceptance_checks()`, and `spict_summary_object()` encode the conventions;
+   assembling `inp` by hand loses them silently.
+3. **Priors carried over from another stock are placeholders, not defaults.** SPiCT is
+   identifiable because of its priors. Say so in the report, and record the source of each in
+   the project's `ai/memory/`.
+4. **One fit, three documents.** The assessment data report fits the model and saves a small
+   summary object; the chapter and the advice sheet read it. Never refit in a downstream
+   document, and never load the fitted object there.
+5. **Report the verdict, not just the plot.** Every acceptance check gets a pass or a fail and a
+   sentence. When one fails and the assessment is carried forward anyway, say by how much and
+   what it means for the advice.
+6. **The three hard constraints override tidiness.** Exploratory callouts stay; official-track
+   advice-sheet numbers do not change under a cosmetic edit; advice-history rows are extended,
+   never fitted. See `knowledge/constraints.md`.
+7. **Review before you render.** Renders are slow. Code-review the changed chunks and resolve
+   issues before starting one.
+8. **Plan mode first.** After the questionnaire, present a plan and confirm before scaffolding
+   or compiling documents.
 
-## 4. Workflow conventions
+---
 
-- **Units**: catches in tonnes throughout.
-- **Survey timing**: `year + 6/12` (June) for SPiCT.
-- **Index scaling**: survey estimates divided by their mean.
-- **`stdevfac` vectors** must average to 1.
-- **`logn` fixed** (Schaefer): `phases$logn <- -1`, `ini$logn <- log(2)`.
-- **`logalpha` / `logbeta` priors deactivated** (`c(0, 0, 0)`).
-- Use the **tidyverse pipe** `|>`, not `%>%`, in new code.
-- Format R code with `air` (config in `air.toml`).
-- For inline list enumerations in qmd narrative text, use `list_values()` from
-  `src/0_setup.R` (handles 1 / 2 / ≥3 element cases correctly).
+## Project memory (in the generated project)
 
-## 5. Running things
+Each generated project has a committed, shared `ai/memory/` folder. **Agents use that folder as
+project memory — not the agent's local per-machine memory.** Read `ai/memory/MEMORY.md` first;
+write a new markdown file with YAML frontmatter when you learn something non-obvious, and add a
+one-line pointer to `MEMORY.md`.
 
-```r
-# Production: renders 1 → 2 and copies outputs to docs/assessment/<year>/
-source("run_assessment.R")
-run_assessment()                            # default years
-run_assessment(assessment_year = 2027)      # next year's run
+The facts a SPiCT project must record: the catch data sources and splice rules, the index
+producer and its pinned commit, where each prior came from, what the catch-uncertainty
+breakpoints mean, which spict version produced the assessment, and — when a benchmark signs the
+configuration off — the date and what was adopted.
 
-# Exploration: single-model diagnostic report
-source("src/exploration/1 fit model.R")
+This repository has its own `memory/` for **developing the pack itself**. Do not confuse the
+two.
 
-# Exploration: interactive Shiny explorer
-shiny::runApp("src/exploration/spict_explorer")
-```
+---
 
-Outputs land in `docs/assessment/<assessment_year>/`. Saved model objects are
-git-ignored under `data/model_output/saved_models/`.
+## House style
 
-## 6. When unsure
+- tidyverse, not base R, for data manipulation; the native pipe `|>` in new code.
+- **Do not hard-wrap prose** in `.qmd`/`.Rmd` files — write each paragraph as one line.
+  Code chunks follow normal formatting.
+- Comment density and naming match the surrounding file.
+- Format R with `air` (config in `air.toml`).
 
-Ask a human in the PR/commit thread before:
+## Academic-writing contract
 
-- Removing or softening exploratory-status callouts
-- Editing `2 advice sheet.qmd` once it's producing official-track output
-- Deleting or overwriting another agent's memory file
-- Adding new stock-level dependencies
-- Changing the canonical year-parameter names (`assessment_year`,
-  `advice_year`, `prev_advice_year`, etc.) — these are matched in
-  `run_assessment.R`, the qmd YAML `params:` blocks, and the exploration scripts.
-
-When in doubt, write a memory file describing the question and the chosen
-path. Future agents (and your future self) will thank you.
+For every generated project artifact, read the installed `academic-style`,
+`academic-conventions`, `academic-data-report`, `academic-assessment-report`, and
+`academic-advice-sheet` skills. spict-template supplies the assessment method; academic-writing
+supplies structure, style, and publishing conventions. Follow
+[`knowledge/academic-writing.md`](knowledge/academic-writing.md). Do not vendor copies of those
+skills here — read the installed versions so improvements propagate.

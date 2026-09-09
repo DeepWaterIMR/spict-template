@@ -1,0 +1,400 @@
+---
+title: "SPiCT candidate fit"
+subtitle: "Exploration"
+date: today
+published-title: "Version"
+format:
+  html:
+    embed-resources: true
+    theme: cosmo
+    toc: true
+    toc-depth: 3
+    toc-expand: true
+    code-fold: true
+    code-summary: "Show code"
+    fig-format: jpeg
+execute:
+  warning: false
+  message: false
+params:
+  run_name: NULL          # Short unique name for this candidate
+  run_description: NULL   # One sentence: what this candidate changes and why
+  fit_path: NULL          # Path to the fit saved by R/explore_fit.R
+  run_ini_trials: 10
+  run_retro: false
+  retro_years: 5
+  hindcast_years: 5
+  run_manage: true
+---
+
+<!--
+Rendered by R/explore_fit.R, once per candidate configuration. The fit is made there and saved;
+this document reports it. Diagnostics and their acceptance criteria are in the pack's
+knowledge/diagnostics.md.
+-->
+
+```{r knit-setup}
+#| include: false
+#| cache: false
+knitr::opts_knit$set(root.dir = here::here())
+
+knitr::knit_hooks$set(timeit = local({
+  now <- NULL
+  function(before, options) {
+    if (before) {
+      now <<- Sys.time()
+    } else {
+      res <- round(difftime(Sys.time(), now, units = "mins"), 1)
+      now <<- NULL
+      print(paste("Time:", as.character(res), "min"))
+    }
+  }
+}))
+```
+
+```{r params}
+source(here::here("R", "0_setup.R"))
+source(here::here("R", "report_helpers.R"))
+source(here::here("R", "spict_helpers.R"))
+source(here::here("R", "spict_exploration.R"))
+source(here::here("R", "advice_tables.R"))
+source(here::here("R", "ices_plots.R"))
+
+model <- params$run_name
+description <- params$run_description
+
+ini_trials <- params$run_ini_trials
+nretroyears <- params$retro_years
+nhindcastyears <- params$hindcast_years
+
+cat("Candidate:", model, "\n")
+cat("Description:", description, "\n")
+```
+
+<details>
+<summary>Unfold to see R package versions and system information used to generate this document</summary>
+```{r}
+#| label: sys-info
+sessionInfo()
+```
+</details>
+
+```{r loadfit}
+# The fit was made and saved by R/explore_fit.R. This document reports it rather than
+# refitting, so the report and the saved candidate cannot disagree.
+res <- readRDS(params$fit_path)
+inp <- res$inp
+
+if (!identical(res$opt$convergence, 0) && !identical(res$opt$convergence, 0L)) {
+  cat("**The candidate did not converge** (optimiser exit code ", res$opt$convergence,
+      "). Nothing below it is meaningful.\n", sep = "")
+  knitr::knit_exit()
+}
+```
+
+# Summary and  parameter correlation matrix
+
+```{r summary}
+#| echo: true
+summary(res)
+all(is.finite(res$sd))
+cov2cor(res$cov.fixed)
+```
+
+# Magnitude of uncertainty and initial values sensitivity
+
+```{r initialvalues}
+#| echo: true
+calc.om(res)
+check.ini(inp, ntrials = ini_trials)
+```
+
+# General plots
+
+```{r generalplots}
+plot(res)
+```
+
+## Biomass
+
+```{r biomass}
+tryCatch(
+  {
+    plotspict.bbmsy(res)
+  },
+  error = function(e) {
+    message("Plot skipped: ", e$message)
+  }
+)
+
+tryCatch(
+  {
+    plotspict.biomass(res)
+  },
+  error = function(e) {
+    message("Plot skipped: ", e$message)
+  }
+)
+```
+
+## Catch and F
+
+```{r catch}
+tryCatch(
+  {
+    plotspict.catch(res)
+  },
+  error = function(e) {
+    message("Plot skipped: ", e$message)
+  }
+)
+
+tryCatch(
+  {
+    plotspict.f(res)
+  },
+  error = function(e) {
+    message("Plot skipped: ", e$message)
+  }
+)
+
+tryCatch(
+  {
+    plotspict.ffmsy(res)
+  },
+  error = function(e) {
+    message("Plot skipped: ", e$message)
+  }
+)
+```
+
+## Kobe and Years to Bmsy
+
+```{r kobe}
+tryCatch(
+  {
+    plotspict.fb(res)
+  },
+  error = function(e) {
+    message("Plot skipped: ", e$message)
+  }
+)
+
+tryCatch(
+  {
+    plotspict.tc(res)
+  },
+  error = function(e) {
+    message("Plot skipped: ", e$message)
+  }
+)
+
+
+```
+
+## Production curve and priors
+
+```{r priors}
+tryCatch(
+  {
+    plotspict.production(res)
+  },
+  error = function(e) {
+    message("Plot skipped: ", e$message)
+  }
+)
+
+
+tryCatch(
+  {
+    plotspict.priors(res)
+  },
+  error = function(e) {
+    message("Plot skipped: ", e$message)
+  }
+)
+```
+
+# Catch observed vs fitted
+
+```{r obscatch}
+
+tryCatch(
+  {
+    comp_plot2(ms = c("res"), variables = c("logCpred"))
+  },
+  error = function(e) {
+    message("Plot skipped: ", e$message)
+  }
+)
+
+```
+
+# Index observed vs fitted
+
+```{r obsindex}
+
+tryCatch(
+  {
+    comp_plot2(ms = c("res"), variables = c("logIpred"))
+  },
+  error = function(e) {
+    message("Plot skipped: ", e$message)
+  }
+)
+```
+
+# OSA residuals
+
+```{r osa, fig.height = 10}
+
+tryCatch(
+  {
+    res <- calc.osa.resid(res)
+    plotspict.diagnostic(res)
+  },
+  error = function(e) {
+    message("Plot skipped: ", e$message)
+  }
+)
+
+```
+
+# Process residuals
+
+```{r process, fig.height = 10}
+
+tryCatch(
+  {
+    res <- calc.process.resid(res)
+    plotspict.diagnostic.process(res)
+  },
+  error = function(e) {
+    message("Plot skipped: ", e$message)
+  }
+)
+
+```
+
+# Retros and hindcasting
+
+```{r retros, eval=params$run_retro}
+
+tryCatch(
+  {
+    res <- retro(res, nretroyear = nretroyears, mc.cores = 1)
+    plotspict.retro(res)
+    plotspict.retro.fixed(res)
+  },
+  error = function(e) {
+    message("Plot skipped: ", e$message)
+  }
+)
+
+tryCatch(
+  {
+    res <- hindcast(res, npeels = nhindcastyears)
+    plotspict.hindcast(res)
+  },
+  error = function(e) {
+    message("Plot skipped: ", e$message)
+  }
+)
+
+
+```
+
+# Management scenarios
+
+```{r manage, eval=params$run_manage}
+
+tryCatch(
+  {
+    TACyear <- res$inp$timeC[length(res$inp$timeC)] + 2
+
+    man <- manage(
+      res,
+      scenarios = c("currentF", "Fmsy", "noF", "ices"),
+      maninterval = c(TACyear, TACyear + 1),
+      maneval = TACyear + 1
+    )
+
+    # man <- add.man.scenario(
+    #   man,
+    #   scenarioTitle = "15th percentile",
+    #   maninterval = c(TACyear, TACyear + 1),
+    #   maneval = TACyear + 1,
+    #   fractiles = list(catch = 0.15),
+    #   breakpointB = 0.5,
+    #   safeguardB = list(limitB = 0.3, prob = 0.95)
+    # )
+
+    manOutput <- sumspict.manage(man, include.unc = TRUE)
+
+    risk <- spictRisk(man, bmsyfrac = 0.5, years = c(TACyear - 1, TACyear)) # 0.5 = Btrigger
+
+    plotspict.hcr(man)
+
+    manTable <- bind_cols(
+      manOutput$est,
+      manOutput$unc,
+      risk %>%
+        mutate(across(BbelowBmsy:FaboveFlim, ~ . * 100)) %>% # change to percent?
+        pivot_wider(
+          id_cols = Scenario,
+          values_from = BbelowBmsy:FaboveFlim,
+          names_from = Year
+        )
+    ) %>%
+      mutate(Scenario = rownames(manOutput$est)) %>%
+      relocate(Scenario)
+  },
+  error = function(e) {
+    message("\n An error occurred in the management chunk:\n", e$message)
+  }
+)
+```
+
+# SPiCT summary
+
+```{r spict-summary}
+# The same summary object the production assessment saves, built by the shared helper rather
+# than by a second implementation here — an exploration report that summarises a fit
+# differently from the assessment is comparing two things, not one.
+tryCatch(
+  {
+    spict_summary <- spict_summary_object(
+      man,
+      assessment_year = TACyear - 1,
+      man_table = manTable,
+      checks = tryCatch(acceptance_checks(res), error = function(e) NULL)
+    )
+    spict_summary$risk <- risk
+
+    dest <- file.path(output_dir, paste0("candidate_summary_", model, ".rds"))
+    saveRDS(spict_summary, file = dest, compress = "xz")
+  },
+  error = function(e) {
+    message("\n An error occurred in the SPiCT summary chunk:\n", e$message)
+  }
+)
+```
+
+```{r}
+#| label: fig-summary-plot
+#| fig-cap: "ICES assessment summary plot."
+tryCatch(
+  {
+    summary_plot(spict_summary)
+  },
+  error = function(e) {
+    message("\n An error occurred in the ICES summary plot chunk:\n", e$message)
+  }
+)
+```
+
+
+
+
+
+

@@ -1,0 +1,559 @@
+---
+title: "{{PROJECT_TITLE}}"
+subtitle: "SPiCT assessment"
+author:
+{{AUTHOR_BLOCK}}
+affiliations:
+{{AFFILIATION_BLOCK}}
+date: today
+published-title: "Version"
+lang: {{LANGUAGE}}
+bibliography: ../../assets/references.bib
+csl: ../../assets/ices_jms.csl
+params:
+  assessment_year: {{ASSESSMENT_YEAR}}   # Year the assessment is carried out
+  advice_year: {{ADVICE_YEAR}}           # Year the advice applies to
+  prev_advice_year: {{PREV_ADVICE_YEAR}} # Year advice was last given
+  refit: true                            # Fit the model, or load the cached fit
+  run_retro: true                        # Run retro(), or load the cached peels
+  run_hindcast: true                     # Run hindcast(), or load the cached result
+  run_check_ini: true                    # Run check.ini(), or load the cached trials
+format:
+  html:
+    self-contained: true
+    toc: true
+    toc-title: "{{PROJECT_TITLE}}"
+    toc-depth: 3
+    code-fold: true
+    code-summary: "Show code"
+    code-tools: true
+    fig-width: {{FIG_WIDTH_DOUBLE}}
+    fig-height: 5
+    fig-format: jpeg
+    output-file: "{{STOCK_SLUG}}-spict-assessment"
+execute:
+  warning: false
+  message: false
+editor_options:
+  chunk_output_type: console
+---
+
+<!--
+This is a DATA REPORT: every analysis chunk stays visible but folded, so the document doubles
+as its own methods appendix. Note what is not in the YAML above — `echo: false`. Setting it
+would silence every chunk and `code-fold` would do nothing.
+
+The report fits the model and saves a small summary object. The working-group chapter and the
+advice sheet read that object; neither refits. That is what makes all three documents quote
+the same numbers.
+
+Read the installed `academic-data-report` and `academic-style` skills before editing, and the
+pack's knowledge/spict.md and knowledge/diagnostics.md before changing anything about the fit.
+-->
+
+```{r setup}
+#| include: false
+knitr::opts_knit$set(root.dir = here::here())
+source(here::here("R", "0_setup.R"))
+source(here::here("R", "report_helpers.R"))
+source(here::here("R", "spict_helpers.R"))
+source(here::here("R", "advice_tables.R"))
+source(here::here("R", "ices_plots.R"))
+
+assessment_year  <- params$assessment_year
+advice_year      <- params$advice_year
+prev_advice_year <- params$prev_advice_year
+intermediate_year <- assessment_year
+
+stock_slug <- cfg$STOCK_SLUG
+model_name <- paste0(cfg$STOCK_NAME_SNAKE, "_spict_", assessment_year)
+
+fit_path     <- file.path(output_dir, paste0("fit_", model_name, ".rds"))
+retro_path   <- file.path(output_dir, paste0("retro_", model_name, ".rds"))
+hind_path    <- file.path(output_dir, paste0("hindcast_", model_name, ".rds"))
+ini_path     <- file.path(output_dir, paste0("checkini_", model_name, ".rds"))
+mgmt_path    <- file.path(output_dir, paste0("manage_", model_name, ".rds"))
+summary_path <- file.path(output_dir, paste0(stock_slug, "_spict_summary_", assessment_year, ".rds"))
+```
+
+::: {.callout-warning}
+## Exploratory assessment — not official advice
+
+This is an **exploratory** SPiCT assessment of {{STOCK_NAME}} (*{{STOCK_LATIN}}*) in ICES subareas {{ICES_AREAS}}. It is **not official {{WORKING_GROUP}} advice** and should not be used as such. The official {{WORKING_GROUP_LONG}} ({{WORKING_GROUP}}) assessment for this stock uses `r cfg$OFFICIAL_ASSESSMENT`. This document explores the suitability and the output of a surplus-production approach alongside it.
+
+Do not remove or soften this callout. See the pack's `knowledge/constraints.md`.
+:::
+
+# Purpose
+
+This report documents the `r assessment_year` SPiCT [@pedersen2017] assessment of {{STOCK_NAME}} (*{{STOCK_LATIN}}*) in ICES subareas {{ICES_AREAS}}, and derives the catch advice for `r advice_year`. It is written for the {{WORKING_GROUP}} assessors and reviewers, who need to be able to check the arithmetic: every analysis step is present in the document, folded, and every number in the prose is computed rather than typed.
+
+Two documents read this report's output rather than repeating its analysis: the working-group chapter (`docs/assessment-report/`) and the advice sheet (`docs/advice-sheet/`). Both load the summary object saved at the end of this document.
+
+SPiCT is a state-space biomass-dynamic model. It has no age structure and no recruitment process, so it says nothing about year-class strength; what it does provide is a stock status relative to MSY reference points, estimated jointly with its own observation and process error, from two series alone.
+
+# Data
+
+## Catches
+
+```{r load-catches}
+catches <- readRDS(file.path(output_dir, paste0(stock_slug, "_catches.rds")))
+landings <- readRDS(file.path(output_dir, paste0(stock_slug, "_landings.rds")))
+
+first_catch_year <- min(catches$year)
+last_data_year   <- max(catches$year)
+```
+
+The catch series runs from `r first_catch_year` to `r last_data_year` and is compiled by `R/1_process_catches.R` (@lst-catch-script) from the sources recorded in `ai/memory/catch-data-sources.md`. Catches are total catches in tonnes throughout; where discards are not reported separately they are inside these figures.
+
+Catches peaked in `r catches$year[which.max(catches$total)]` at `r fmt(max(catches$total))` t and reached their lowest recorded level in `r catches$year[which.min(catches$total)]` at `r fmt(min(catches$total))` t. In the five most recent years they ranged from `r fmt(min(tail(catches$total, 5)))` to `r fmt(max(tail(catches$total, 5)))` t (@fig-catch-history). The most recent year is preliminary.
+
+```{r}
+#| label: fig-catch-history
+#| fig-cap: "Reported catches by nation. The most recent year is preliminary; years before the nation breakdown begins are shown as a reconstructed total."
+#| fig-height: 4
+landings |>
+  tidyr::pivot_longer(-year, values_drop_na = TRUE) |>
+  ggplot(aes(year, value / 1000, fill = name)) +
+  geom_col() +
+  scale_y_continuous(expand = expansion(c(0, 0.02)), n.breaks = 8) +
+  scale_x_continuous(expand = expansion(c(0.01, 0.01))) +
+  labs(x = "Year", y = "Catch (kt)", fill = NULL)
+```
+
+## The abundance index
+
+```{r load-index}
+index <- readRDS(file.path(output_dir, paste0(stock_slug, "_index.rds")))
+
+first_index_year <- min(index$year)
+last_index_year  <- max(index$year)
+index_timing     <- cfg$INDEX_TIMING
+```
+
+The model is driven by the `r cfg$INDEX_NAME`, covering `r first_index_year`–`r last_index_year` (`r nrow(index)` observations). It is prepared by `R/2_prepare_index.R` (@lst-index-script) from the producer recorded in `ai/memory/index-data-sources.md`. The index is relative: SPiCT estimates the catchability linking it to biomass, so it is rescaled by its own mean before fitting, and only its shape over time carries information.
+
+Each observation is placed at `r index_timing` of the year, matching when the survey runs. Per-observation standard errors enter the model as a multiplier on the estimated observation error, rescaled to average one.
+
+```{r}
+#| label: fig-spict-input
+#| fig-cap: "The two series the model is fitted to. Catches on the left axis, the scaled abundance index on the right."
+#| fig-height: 4
+index_scaled <- index |>
+  mutate(
+    time = year + index_timing,
+    scaled = est / mean(est, na.rm = TRUE)
+  )
+
+catch_max  <- max(catches$total, na.rm = TRUE)
+index_lo   <- floor(min(index_scaled$scaled) * 10) / 10
+index_hi   <- ceiling(max(index_scaled$scaled) * 10) / 10
+scale_fac  <- catch_max / (index_hi - index_lo)
+
+ggplot() +
+  geom_col(data = catches, aes(year, total), fill = "grey75", colour = "grey60") +
+  geom_line(
+    data = index_scaled, aes(time, (scaled - index_lo) * scale_fac),
+    colour = "#449BCF", linewidth = 1
+  ) +
+  scale_x_continuous(expand = expansion(mult = c(0, 0.01))) +
+  scale_y_continuous(
+    name = "Catch (t)",
+    expand = expansion(mult = c(0, 0.05)),
+    sec.axis = sec_axis(~ . / scale_fac + index_lo, name = "Index (relative)")
+  ) +
+  labs(x = "Year")
+```
+
+# Model settings
+
+```{r build-input}
+inp <- build_spict_input(catches = catches, index = index)
+
+settings_tbl <- tibble::tibble(
+  Setting = c(
+    "Stock", "Catch series", "Catch units", "Abundance index", "Index timing",
+    "Index scaling", "Production function", "Coupling priors",
+    "Catch uncertainty", "spict version"
+  ),
+  Value = c(
+    paste0("{{STOCK_NAME}} (", "*{{STOCK_LATIN}}*", "), ICES subareas {{ICES_AREAS}}"),
+    paste(first_catch_year, "to", last_data_year),
+    "Tonnes",
+    paste0(cfg$INDEX_NAME, " (", first_index_year, " to ", last_index_year, ")"),
+    paste0("Year + ", index_timing),
+    "Divided by the series mean",
+    if (identical(tolower(cfg$PRODUCTION_MODEL), "schaefer")) {
+      "Schaefer; n fixed at log(2)"
+    } else {
+      paste("n estimated;", cfg$PRODUCTION_MODEL)
+    },
+    "logalpha and logbeta deactivated",
+    paste0(
+      "Linear ramp from ", cfg$STDEV_FAC_HIGH, "x at ", cfg$STDEV_HIGH_YEAR,
+      " to ", cfg$STDEV_FAC_LOW, "x at ", cfg$STDEV_LOW_YEAR, ", rescaled to mean 1"
+    ),
+    as.character(packageVersion("spict"))
+  )
+)
+```
+
+The settings are read from `config.yaml`, not typed into this document, so a change is made in one place and every document that quotes it follows (@tbl-settings).
+
+The shape parameter $n$ is fixed at the Schaefer value. A production-function shape estimated from one short catch series and one index is not identified, and leaving $n$ free is the usual route to a fit that converges on an implausible optimum. The coupling parameters `logalpha` and `logbeta` are deactivated so that the observation and process error structures are estimated independently of the prior on `logsdb`.
+
+Catch observations before `r cfg$STDEV_HIGH_YEAR` are downweighted through a linear ramp in the observation-error multiplier, reflecting the reporting-quality history recorded in `ai/memory/catch-data-sources.md`.
+
+```{r}
+#| label: tbl-settings
+#| tbl-cap: "Model configuration, read from config.yaml."
+make_table(settings_tbl)
+```
+
+```{r}
+#| label: tbl-priors
+#| tbl-cap: "Priors. Each is specified as the mean on the natural scale, the standard deviation on the log scale, and whether the prior is active."
+priors <- config_priors()
+priors_tbl <- tibble::tibble(
+  Parameter = names(priors),
+  Mean = vapply(priors, \(p) round(exp(p[1]), 4), numeric(1)),
+  `SD (log scale)` = vapply(priors, \(p) p[2], numeric(1)),
+  Active = vapply(priors, \(p) p[3] == 1, logical(1)),
+  Source = "[VERIFY — record the source of each prior in ai/memory/priors.md]"
+)
+make_table(priors_tbl, digits = 3)
+```
+
+::: {.callout-important}
+The priors in @tbl-priors are the scaffold's starting values. **Priors carried over from another stock are placeholders, not defaults** — SPiCT is a state-space model fitted to two short series, and it is the priors that make it identifiable. Replace them with values derived from this stock's life history, and record where each came from, before the assessment is used for anything.
+:::
+
+```{r}
+#| label: fig-input-overview
+#| fig-cap: "The model input as SPiCT sees it: the two series with their observation uncertainties."
+#| fig-height: 8
+plotspict.ci(inp)
+```
+
+# Model fitting
+
+```{r fit-model}
+#| results: hide
+if (params$refit || !file.exists(fit_path)) {
+  inp$optimiser.control <- list(iter.max = 1e5, eval.max = 1e5)
+  fit <- fit.spict(inp)
+  fit <- calc.osa.resid(fit)
+  fit <- calc.process.resid(fit)
+  saveRDS(fit, fit_path, compress = "xz")
+} else {
+  fit <- readRDS(fit_path)
+}
+```
+
+```{r check-ini}
+#| results: hide
+if (params$run_check_ini || !file.exists(ini_path)) {
+  ini <- check.ini(fit, ntrials = cfg$NINITRIALS %||% 30)
+  saveRDS(ini, ini_path, compress = "xz")
+} else {
+  ini <- readRDS(ini_path)
+}
+```
+
+```{r retro-analysis}
+#| results: hide
+if (params$run_retro || !file.exists(retro_path)) {
+  retro_fit <- retro(fit, nretroyear = cfg$NRETROYEARS %||% 5, mc.cores = 1)
+  saveRDS(retro_fit, retro_path, compress = "xz")
+} else {
+  retro_fit <- readRDS(retro_path)
+}
+```
+
+```{r hindcast-analysis}
+#| results: hide
+if (params$run_hindcast || !file.exists(hind_path)) {
+  hind_fit <- hindcast(fit, npeels = cfg$NHINDCASTYEARS %||% 5)
+  saveRDS(hind_fit, hind_path, compress = "xz")
+} else {
+  hind_fit <- readRDS(hind_path)
+}
+```
+
+The model was fitted with `fit.spict()` under raised iteration limits. One-step-ahead and process residuals were calculated, sensitivity to initial values was assessed with `check.ini()`, and the retrospective and hindcast peels were run at `r cfg$NRETROYEARS` and `r cfg$NHINDCASTYEARS` years respectively.
+
+Each of those four steps caches to `data/output/` and is controlled by a document parameter, so re-renders while editing prose load rather than refit. **A cached diagnostic that outlived its fit is worse than no diagnostic**: when the data, the priors, or the settings change, delete the cache rather than trusting the toggle.
+
+# Diagnostics
+
+```{r acceptance}
+checks <- acceptance_checks(fit, ini = ini, retro_fit = retro_fit)
+n_failed <- sum(!checks$Passed)
+```
+
+`r if (n_failed == 0) "The fit passed every acceptance check" else paste0("The fit failed ", spell_number(n_failed), " of the ", nrow(checks), " acceptance checks")` (@tbl-acceptance). `r if (n_failed > 0) paste0("The failing checks are ", list_values(checks$Check[!checks$Passed]), ". [VERIFY — say what each failure means for how much weight the advice can carry, and repeat that judgement in the advice sheet's Quality of the assessment section.]")`
+
+```{r}
+#| label: tbl-acceptance
+#| tbl-cap: "The WKLIFE acceptance checks, their criteria, and the verdict for this fit."
+make_table(dplyr::mutate(checks, Passed = ifelse(Passed, "Yes", "No")))
+```
+
+## Sensitivity to initial values
+
+```{r}
+#| label: tbl-check-ini
+#| tbl-cap: "Parameter estimates from trials started at different initial values. A fit whose answer depends on where the optimiser started is not a fit."
+ini$check.ini$resmat |>
+  as.data.frame() |>
+  tibble::rownames_to_column("Trial") |>
+  make_table(digits = 3)
+```
+
+## Residuals
+
+```{r}
+#| label: fig-osa-residuals
+#| fig-cap: "One-step-ahead residual diagnostics: residuals over time, their autocorrelation, a normal quantile plot, and the cumulative-sum test. The tests reported in the panel titles are for autocorrelation (Ljung–Box), bias (t-test), and normality (Shapiro–Wilk)."
+#| fig-height: 9
+plotspict.diagnostic(fit)
+```
+
+<!-- Report the p-values, not only the plot. A reader cannot tell from the panels alone whether a test was passed. -->
+
+```{r}
+#| label: fig-process-residuals
+#| fig-cap: "Process residual diagnostics. A run of same-signed biomass innovations means the production function cannot follow what the data are saying — usually because r is held too low by its prior."
+#| fig-height: 9
+plotspict.diagnostic.process(fit)
+```
+
+## Priors against posteriors
+
+```{r}
+#| label: fig-priors
+#| fig-cap: "Prior (dashed) and posterior (solid) distributions. A posterior lying on top of its prior means the data say nothing about that parameter; a posterior pushed to the edge of its prior means the data disagree with it and are losing."
+plotspict.priors(fit)
+```
+
+## Retrospective pattern
+
+```{r mohn}
+rho <- mohns_rho(retro_fit, what = c("FFmsy", "BBmsy"))
+```
+
+Mohn's $\rho$ was `r round_report(rho[["BBmsy"]])` for $B/B_{MSY}$ and `r round_report(rho[["FFmsy"]])` for $F/F_{MSY}$ (@fig-retro). Values inside ±0.2 are the usual bar for a long-lived species.
+
+```{r}
+#| label: fig-retro
+#| fig-cap: "Retrospective peels. Each line is a fit with one further year of data removed; the black line is the full-data fit."
+#| fig-height: 7
+plotspict.retro(retro_fit)
+```
+
+```{r}
+#| label: fig-hindcast
+#| fig-cap: "Hindcast evaluation. The mean absolute scaled error compares the model's index predictions against a persistence baseline: below one is predictive skill, above one is not."
+plotspict.hindcast(hind_fit)
+```
+
+# Results
+
+```{r}
+#| label: tbl-parameters
+#| tbl-cap: "Estimated parameters on the natural scale, with 95% confidence intervals."
+sumspict.parest(fit) |>
+  as.data.frame() |>
+  tibble::rownames_to_column("Parameter") |>
+  dplyr::mutate(dplyr::across(where(is.numeric), round_report)) |>
+  make_table()
+```
+
+## Reference points
+
+SPiCT estimates **relative** reference points. B~lim~ and MSY B~trigger~ are not estimated; they are conventions supplied by the advice framework, set here at B/B~MSY~ = `r cfg$BLIM_BMSY` and `r cfg$BTRIGGER_BMSY` following the ICES standard for SPiCT stocks. Where this stock has absolute reference points from another assessment, they belong in the working-group chapter with their own source named — not here.
+
+```{r}
+#| label: tbl-drefpoints
+#| tbl-cap: "Deterministic reference points."
+sumspict.drefpoints(fit) |>
+  as.data.frame() |>
+  tibble::rownames_to_column("Reference point") |>
+  dplyr::mutate(dplyr::across(where(is.numeric), round_report)) |>
+  make_table()
+```
+
+```{r}
+#| label: tbl-srefpoints
+#| tbl-cap: "Stochastic reference points. These differ from the deterministic points, and the advice states which of the two it uses."
+sumspict.srefpoints(fit) |>
+  as.data.frame() |>
+  tibble::rownames_to_column("Reference point") |>
+  dplyr::mutate(dplyr::across(where(is.numeric), round_report)) |>
+  make_table()
+```
+
+## Stock status
+
+```{r status}
+states <- sumspict.states(fit)
+bbmsy <- states[grep("/Bmsy$", rownames(states))[1], "est"]
+ffmsy <- states[grep("/Fmsy$", rownames(states))[1], "est"]
+
+b_status <- dplyr::case_when(
+  bbmsy < cfg$BLIM_BMSY ~ "below B~lim~",
+  bbmsy < cfg$BTRIGGER_BMSY ~ "below MSY B~trigger~ but above B~lim~",
+  .default = "above MSY B~trigger~"
+)
+f_status <- if (ffmsy > 1) "above F~MSY~" else "below F~MSY~"
+```
+
+At the end of `r last_data_year`, exploitable biomass was estimated `r b_status` (B/B~MSY~ = `r round_report(bbmsy)`) and fishing pressure `r f_status` (F/F~MSY~ = `r round_report(ffmsy)`) (@tbl-states, @fig-kobe). These two sentences are derived in code from the same objects the tables use, so the prose cannot contradict the table beside it.
+
+```{r}
+#| label: tbl-states
+#| tbl-cap: "Estimated stock status at the end of the assessment period."
+states |>
+  as.data.frame() |>
+  tibble::rownames_to_column("Quantity") |>
+  dplyr::mutate(dplyr::across(where(is.numeric), round_report)) |>
+  make_table()
+```
+
+```{r}
+#| label: fig-model-overview
+#| fig-cap: "SPiCT overview: the fitted biomass and fishing-mortality trajectories, catches, and the index, with 95% confidence intervals."
+#| fig-height: 10
+plot(fit)
+```
+
+```{r}
+#| label: fig-kobe
+#| fig-cap: "Stock trajectory in B/B~MSY~–F/F~MSY~ space. The green quadrant is biomass above and fishing pressure below their MSY levels; the most recent year is highlighted."
+plotspict.fb(fit)
+```
+
+# Management scenarios
+
+```{r manage}
+#| results: hide
+if (params$refit || !file.exists(mgmt_path)) {
+  management <- manage(
+    fit,
+    scenarios = c("currentF", "Fmsy", "noF", "ices"),
+    maninterval = c(advice_year, advice_year + 1),
+    maneval = advice_year + 1,
+    verbose = FALSE
+  )
+  saveRDS(management, mgmt_path, compress = "xz")
+} else {
+  management <- readRDS(mgmt_path)
+}
+
+man_out <- sumspict.manage(management, include.unc = TRUE, verbose = FALSE)
+
+# The scenario names live in the rownames, and the estimates and their intervals come back as
+# separate matrices. Joining them here keeps every downstream document reading one table.
+man_table <- dplyr::bind_cols(
+  Scenario = rownames(man_out$est),
+  as.data.frame(man_out$est),
+  as.data.frame(man_out$unc)
+)
+
+risk <- spictRisk(management, years = c(advice_year - 1, advice_year))
+```
+
+Four scenarios were projected for `r advice_year`: the `r cfg$ADVICE_FRAMEWORK` advice rule, fishing at F~MSY~, keeping the current fishing mortality, and no fishing. The advice rule is the MSY hockey stick with B~lim~ at B/B~MSY~ = `r cfg$BLIM_BMSY` and the `r 35`th percentile of the projected catch distribution.
+
+Risk probabilities accompany the scenarios (@tbl-risk). A scenario with an acceptable median catch and a substantial probability of biomass falling below B~lim~ is not an acceptable scenario, and the two tables must be read together.
+
+```{r}
+#| label: tbl-scenarios
+#| tbl-cap: "Management scenario estimates for the advice year, with 95 % confidence intervals on the states."
+man_table |>
+  dplyr::mutate(dplyr::across(where(is.numeric), round_report)) |>
+  make_table()
+```
+
+```{r}
+#| label: tbl-risk
+#| tbl-cap: "Probability that biomass falls below each reference level, and that fishing mortality exceeds F~MSY~ or F~lim~, by scenario and year."
+risk |>
+  dplyr::mutate(dplyr::across(BbelowBmsy:FaboveFlim, \(x) round(x * 100))) |>
+  make_table()
+```
+
+```{r}
+#| label: fig-hcr
+#| fig-cap: "The harvest control rule and the projected scenarios."
+plotspict.hcr(management)
+```
+
+# Results and recommendations
+
+```{r save-summary}
+spict_summary <- spict_summary_object(
+  management, assessment_year, man_table = man_table, checks = checks
+)
+saveRDS(spict_summary, summary_path, compress = "xz")
+
+# Looked up by name, not by row position: the advice rule is not necessarily row 1, and will
+# not stay row 1 the first time a scenario is added.
+advice_row <- spict_summary$manTable |>
+  dplyr::filter(stringr::str_detect(Scenario, "ICES advice rule"))
+if (nrow(advice_row) != 1) {
+  stop("Expected exactly one advice-rule scenario; found ", nrow(advice_row), ".")
+}
+advised_catch <- round(advice_row$C[1])
+```
+
+Under the `r cfg$ADVICE_FRAMEWORK`, catches in `r advice_year` should be no more than **`r fmt(advised_catch)` t** (@fig-summary). That number, the stock status above, and the whole catch-scenario table are written to `` `r basename(summary_path)` `` in `data/output/`, and the advice sheet and the working-group chapter read them from there.
+
+`r if (n_failed > 0) paste0("**", spell_number(n_failed, sentence_start = TRUE), " acceptance check", if (n_failed > 1) "s", " failed.** Say plainly in the working-group chapter and in the advice sheet how much confidence the advice can carry, rather than reporting the number without its caveat.")`
+
+[VERIFY — state which values are ready for the working group and which are provisional, and what you tried and dropped along the way.]
+
+```{r}
+#| label: fig-summary
+#| fig-cap: "Stock summary as it appears on the advice sheet: total catches, relative fishing pressure, and relative exploitable biomass, with 95% confidence intervals and the reference points."
+#| fig-height: 6
+summary_plot(spict_summary)
+```
+
+# Software and reproducibility
+
+The assessment was run in `r R.version.string` [@rcoreteam] with spict `r packageVersion("spict")` [@pedersen2017], which fits the model through TMB `r packageVersion("TMB")`. Data were handled with the tidyverse packages `r packageVersion("tidyverse")` [@tidyverse] and figures produced with ggplot2 `r packageVersion("ggplot2")` [@ggplot2]. The document was compiled with Quarto `r quarto::quarto_version()` [@quarto] and rendered by knitr `r packageVersion("knitr")` [@knitr].
+
+<!-- Cite every package that influenced the result, with an entry in docs/assets/references.bib taken from citation(). A generated dump of citation() output does not satisfy this. -->
+
+This document and the associated analyses were created with researcher-supervised generative AI (<!-- EXACT MODEL NAMES AND ROLES, CONFIRMED BY THE RESEARCHER -->). The authors specified and checked the assessment, and reviewed, edited, and approved all AI-assisted content, for which they take full responsibility.
+
+# References {.unnumbered}
+
+::: {#refs}
+:::
+
+# Appendix: analysis scripts {.appendix}
+
+The scripts that produced this report's inputs, in run order. `readLines()` runs at render time even under `eval: false`, so a missing script breaks the render rather than being papered over.
+
+```{r catch-script, code = readLines(here::here("R", "1_process_catches.R")), eval = FALSE, echo = TRUE}
+#| lst-label: lst-catch-script
+#| lst-cap: "Complete catch-compilation script."
+#| code-fold: true
+#| code-summary: "Show the catch-compilation script"
+```
+
+```{r index-script, code = readLines(here::here("R", "2_prepare_index.R")), eval = FALSE, echo = TRUE}
+#| lst-label: lst-index-script
+#| lst-cap: "Complete index-preparation script."
+#| code-fold: true
+#| code-summary: "Show the index-preparation script"
+```
+
+```{r helpers-script, code = readLines(here::here("R", "spict_helpers.R")), eval = FALSE, echo = TRUE}
+#| lst-label: lst-helpers-script
+#| lst-cap: "SPiCT input construction, risk calculation, and the acceptance checks."
+#| code-fold: true
+#| code-summary: "Show the SPiCT helpers"
+```

@@ -1,0 +1,325 @@
+---
+title: "SPiCT candidate comparison"
+subtitle: "Exploration"
+date: today
+published-title: "Version"
+format:
+  html:
+    embed-resources: true
+    theme: cosmo
+    toc: true
+    toc-depth: 3
+    toc-expand: true
+    code-fold: true
+    code-summary: "Show code"
+    fig-format: jpeg
+execute:
+  warning: false
+  message: false
+params:
+  description: NULL   # What question this comparison answers
+  candidates: NULL    # Candidate names saved by R/explore_fit.R
+  output_dir: NULL    # Where those candidates live
+---
+
+<!--
+Rendered by R/explore_compare.R. Candidates fitted to DIFFERENT DATA are not comparable by
+likelihood or AIC; their trajectories still are. Say which comparison you are making.
+-->
+
+```{r knit-setup}
+#| include: false
+#| cache: false
+knitr::opts_knit$set(root.dir = here::here())
+
+knitr::knit_hooks$set(timeit = local({
+  now <- NULL
+  function(before, options) {
+    if (before) {
+      now <<- Sys.time()
+    } else {
+      res <- round(difftime(Sys.time(), now, units = "mins"), 1)
+      now <<- NULL
+      print(paste("Time:", as.character(res), "min"))
+    }
+  }
+}))
+```
+
+```{r params}
+source(here::here("R", "0_setup.R"))
+source(here::here("R", "report_helpers.R"))
+source(here::here("R", "spict_helpers.R"))
+source(here::here("R", "spict_exploration.R"))
+
+description <- params$description
+models <- params$candidates
+model_dir <- params$output_dir
+
+cat(description, "\n")
+```
+
+
+
+```{r collectmodels}
+
+ms <- lapply(models, function(m) {
+  cat("Loading model:", m, "\n")
+  out <- readRDS(file.path(model_dir, paste0("candidate_", m, ".rds")))
+  attributes(out)$model_name <- m
+  return(out)
+})
+
+names(ms) <- models
+```
+
+# Models convergence
+
+```{r convergence}
+converged <- vapply(ms, function(m) isTRUE(m$opt$convergence == 0), logical(1))
+
+for (i in seq_along(ms)) {
+  cat("Candidate:", names(ms)[i], "-> convergence:", ms[[i]]$opt$convergence, "\n")
+}
+
+# A candidate that did not converge is dropped rather than plotted: nothing it reports is
+# meaningful, and a non-converged trajectory beside converged ones invites comparison.
+if (any(!converged)) {
+  cat("\nDropped (did not converge):", paste(names(ms)[!converged], collapse = ", "), "\n")
+}
+ms <- ms[converged]
+if (!length(ms)) stop("No candidate converged; there is nothing to compare.")
+
+ms_n <- names(ms)
+model_names <- ms_n
+gg_cols <- scales::hue_pal()(length(ms_n))
+
+# good_ms <- list()
+
+# for (mn in ms_n) {
+#   fit <- ms[[mn]]
+#   conv <- as.character(fit$opt$convergence)
+
+#   if (conv == "0") {
+#     good_ms[[mn]] <- fit
+#   }
+
+#   cat(mn, "-> convergence:", conv, "\n")
+# }
+
+# ms <- good_ms
+# ms_n <- names(ms)
+
+```
+
+
+# Plotspict compare
+
+```{r plotspictgeneral}
+tryCatch(
+  {
+    plotspict.compare(ms, col = gg_cols)
+    plotspict.compare(ms, CI = 0, col = gg_cols)
+  },
+  error = function(e) {
+    message("\n An error occurred:\n", e$message)
+  }
+)
+```
+
+## Biomass
+
+```{r biomass}
+tryCatch(
+  {
+    plotspict.compare(ms, varname = "B", plot.legend = 2, col = gg_cols)
+    plotspict.compare(ms, varname = "B", CI = 0, col = gg_cols)
+    plotspict.compare(ms, varname = "BBmsy", plot.legend = 2, col = gg_cols)
+    plotspict.compare(ms, varname = "BBmsy", CI = 0, col = gg_cols)
+  },
+  error = function(e) {
+    message("\n An error occurred:\n", e$message)
+  }
+)
+```
+
+## Fishing mortality
+
+```{r fmortality}
+tryCatch(
+  {
+    plotspict.compare(ms, varname = "F", col = gg_cols)
+    plotspict.compare(ms, varname = "F", CI = 0, col = gg_cols)
+    plotspict.compare(ms, varname = "FFmsy", col = gg_cols)
+    plotspict.compare(ms, varname = "FFmsy", CI = 0, col = gg_cols)
+  },
+  error = function(e) {
+    message("\n An error occurred:\n", e$message)
+  }
+)
+```
+
+## Catch and Production
+
+```{r catchandprod}
+tryCatch(
+  {
+    plotspict.compare(ms, varname = "C", col = gg_cols)
+    plotspict.compare(ms, varname = "C", CI = 0, col = gg_cols)
+    plotspict.compare(ms, varname = "P", col = gg_cols)
+    plotspict.compare(ms, varname = "P", CI = 0, col = gg_cols)
+  },
+  error = function(e) {
+    message("\n An error occurred:\n", e$message)
+  }
+)
+```
+
+# Reference points
+
+## MSY
+
+```{r msy}
+rp_vars <- c("logMSY")
+
+comp_plot(ms = ms, variables = rp_vars)
+
+```
+
+## Bmsy
+
+```{r bmsy}
+rp_vars <- c('logBmsy')
+
+comp_plot(ms = ms, variables = rp_vars)
+```
+
+## Fmsy
+
+```{r fmsy}
+rp_vars <- c('logFmsy')
+
+comp_plot(ms = ms, variables = rp_vars)
+
+```
+
+# State of the stock
+
+## Final year biomass
+
+```{r bbmsy}
+rp_vars <- c("logBlBmsy")
+
+comp_plot(ms = ms, variables = rp_vars)
+```
+
+```{r bl}
+rp_vars <- c("logBl")
+
+comp_plot(ms = ms, variables = rp_vars)
+```
+
+## Final year fishing mortality
+
+```{r ffmsy}
+rp_vars <- c("logFlFmsy")
+comp_plot(ms = ms, variables = rp_vars)
+```
+
+```{r fl}
+rp_vars <- c("logFl")
+comp_plot(ms = ms, variables = rp_vars)
+```
+
+# Important parameters
+
+## BKfrac
+
+```{r bkfrac}
+rp_vars <- c("logbkfrac")
+comp_plot(ms = ms, variables = rp_vars)
+```
+
+## n
+
+```{r logn}
+rp_vars <- c("logn")
+comp_plot(ms = ms, variables = rp_vars)
+```
+
+## r
+
+```{r logr}
+rp_vars <- c("logr")
+comp_plot(ms = ms, variables = rp_vars)
+```
+
+## K
+
+```{r logK}
+rp_vars <- c("logK")
+comp_plot(ms = ms, variables = rp_vars)
+```
+
+# Standard deviation values
+
+## sdc
+
+```{r sdc}
+sd_values <- c("logsdc")
+comp_plot(ms = ms, variables = sd_values)
+```
+
+## sdi
+
+```{r sdi}
+sd_values <- c("logsdi")
+comp_plot(ms = ms, variables = sd_values)
+```
+
+## sdb
+
+```{r sdb}
+sd_values <- c("logsdb")
+comp_plot(ms = ms, variables = sd_values)
+```
+
+## sdf
+
+```{r sdf}
+sd_values <- c("logsdf")
+comp_plot(ms = ms, variables = sd_values)
+
+```
+
+## alpha
+
+```{r alpha}
+sd_values <- c("logalpha")
+comp_plot(ms = ms, variables = sd_values)
+```
+
+## beta
+
+```{r beta}
+sd_values <- c("logbeta")
+comp_plot(ms = ms, variables = sd_values)
+```
+
+# Catch observed vs fitted
+
+Observed catches are extracted from the first model in the list.
+
+```{r obscatch}
+comp_plot2(ms = ms, variables = c("logCpred"))
+```
+
+# Index observed vs fitted
+
+Observed index is extracted from the first model in the list.
+
+```{r obsindex}
+comp_plot2(ms = ms, variables = c("logIpred"))
+```
+
+

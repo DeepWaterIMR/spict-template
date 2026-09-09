@@ -1,0 +1,24 @@
+# Files agents should NOT read automatically. Catch and index data can be confidential or
+# commercially sensitive, and none of it belongs in a model's context unless the user points
+# at it explicitly.
+# (Claude Code honours .claudeignore; other agents: treat this as the do-not-read list.)
+
+*.rds
+*.rda
+*.RData
+*.xlsx
+*.xls
+*.csv
+*.tsv
+*.parquet
+*.gpkg
+*.shp
+
+/data/
+/output/
+/outputs/
+/results/
+/private/
+/scratch/
+/logs/
+/review/

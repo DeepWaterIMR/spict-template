@@ -1,0 +1,90 @@
+# config.yaml — beaked redfish, a worked example.
+#
+# Copy this file, fill it for your stock, and hand it to scaffold_spict(). The identity
+# fields are stamped into paths and document YAML when the project is created; everything
+# below "Read at run time" is read by R/0_setup.R on every render, so it can be changed by
+# editing this file rather than the documents.
+#
+# The values here are the beaked redfish (reb.27.1-2) exploratory assessment. They are an
+# EXAMPLE, not a default: the priors in particular are golden-redfish values that beaked
+# redfish inherited and has not yet replaced.
+
+# --- academic-writing identity ---------------------------------------------------------
+PROJECT_TITLE: "SPiCT assessment of beaked redfish (Sebastes mentella) in ICES subareas 1 and 2"
+PROJECT_SLUG: "reb-spict"
+PROJECT_YEAR: 2026
+
+# Accountable human authors. Never invent these — confirm them with the analyst.
+AUTHORS:
+  - name: "Mikko Vihtakari"
+    email: "mikko.vihtakari@hi.no"
+    orcid: "0000-0003-0371-4319"
+    affiliation: imr
+
+AFFILIATIONS:
+  - id: imr
+    name: "Institute of Marine Research, Tromsø, Norway"
+
+LANGUAGE: en-US
+CSL: "../assets/ices_jms.csl"
+BIBLIOGRAPHY: "../assets/references.bib"
+FIG_WIDTH_SINGLE_MM: 85
+FIG_WIDTH_DOUBLE_MM: 170
+BASE_SIZE: 12
+DATA_DIR: "data"
+SOURCE_DIR: "data/source"
+OUTPUT_DIR: "data/output"
+FIGURES_DIR: "figures"
+
+# --- Stock identity (stamped) ----------------------------------------------------------
+STOCK_CODE: "reb"                       # ICES short code, lower case
+STOCK_NAME: "beaked redfish"            # Display name, as it reads in a sentence
+STOCK_SLUG: "beaked-redfish"            # Kebab-case, used in filenames
+STOCK_NAME_SNAKE: "beaked_redfish"      # Snake-case, used in object and file names
+STOCK_LATIN: "Sebastes mentella"        # Binomial, no italics markers
+ICES_AREAS: "1 and 2"                   # As it reads in a sentence
+ICES_STOCK_ID: "reb.27.1-2"             # Verify against the ICES stock register
+WORKING_GROUP: "JRN-AFWG"
+WORKING_GROUP_LONG: "Joint Russian-Norwegian Working Group on Arctic Fisheries"
+
+# --- Assessment status (read at run time) ----------------------------------------------
+EXPLORATORY: true                       # true when SPiCT supplements an official assessment
+OFFICIAL_ASSESSMENT: "the gadget3 age-structured model (https://gadget-framework.github.io/)"
+ADVICE_FRAMEWORK: "ICES MSY approach"
+
+# --- Years ------------------------------------------------------------------------------
+ASSESSMENT_YEAR: 2026
+ADVICE_YEAR: 2027
+PREV_ADVICE_YEAR: 2024
+PREV_ADVICE_CATCH: 0                    # Tonnes; 0 when there was no previous advice
+FIRST_DATA_YEAR: 1987
+
+# --- Index ------------------------------------------------------------------------------
+INDEX_NAME: "Over 30 cm biomass index"  # The variant used for the assessment
+INDEX_ELEMENT: "Over 30 cm biomass"     # Name (preferred) or position in the producer's list
+INDEX_TIMING: 0.5                       # Fraction of the year the observation refers to
+INDEX_SOURCE: "https://github.com/DeepWaterIMR/index-template"
+
+# --- Model settings ---------------------------------------------------------------------
+PRODUCTION_MODEL: "schaefer"            # Fixes logn at log(2); anything else is a benchmark decision
+
+# Priors, as c(log(mean), sd, use). PLACEHOLDERS carried over from golden redfish.
+PRIOR_LOGR:       [-1.6094, 0.5, 1]     # log(0.2)
+PRIOR_LOGBKFRAC:  [-0.6931, 0.5, 1]     # log(0.5)
+PRIOR_LOGSDB:     [-1.6094, 0.5, 1]     # log(0.2)
+
+# Catch-uncertainty ramp breakpoints. Reporting-quality thresholds, not round numbers.
+STDEV_HIGH_YEAR: 1987                   # Before this, catches are least reliable
+STDEV_LOW_YEAR: 2022                    # After this, catches are most reliable
+STDEV_FAC_HIGH: 3                       # Multiplier at and before STDEV_HIGH_YEAR
+STDEV_FAC_LOW: 1                        # Multiplier at and after STDEV_LOW_YEAR
+
+# --- Reference-point conventions ---------------------------------------------------------
+BLIM_BMSY: 0.3
+BTRIGGER_BMSY: 0.5
+FLIM_FMSY: 1.7
+
+# --- Diagnostics --------------------------------------------------------------------------
+NRETROYEARS: 5
+NHINDCASTYEARS: 5
+NINITRIALS: 30                          # Trials for check.ini()

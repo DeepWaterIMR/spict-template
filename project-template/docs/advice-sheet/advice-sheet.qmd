@@ -1,0 +1,704 @@
+---
+title: "{{PROJECT_TITLE}}"
+date: today
+published-title: "Version"
+lang: {{LANGUAGE}}
+bibliography: ../assets/references.bib
+csl: ../assets/ices_jms.csl
+output-file: "{{PROJECT_SLUG}}-advice-sheet"
+params:
+  assessment_year: {{ASSESSMENT_YEAR}}   # Year the assessment was carried out
+  advice_year: {{ADVICE_YEAR}}           # Year the advice applies to
+  prev_advice_year: {{PREV_ADVICE_YEAR}} # Year advice was last given
+format:
+  html:
+    embed-resources: true
+    toc: true
+    toc-depth: 1
+    toc-title: "Contents"
+    css: ../assets/ices_advice.css
+    fig-width: {{FIG_WIDTH_DOUBLE}}
+    fig-height: 4
+    fig-dpi: 150
+  docx:
+    # Two templates ship with academic-writing. Pick the body this sheet is going to:
+    #   ../assets/advice_template_imr.docx   — Institute of Marine Research
+    #   ../assets/advice_template_ices.docx  — ICES
+    # Swap in the working group's own template when it has one.
+    reference-doc: ../assets/advice_template_imr.docx
+    # The IMR template expects body text in Word's "Normal" style; this filter puts it there.
+    # Remove the filter when rendering against the ICES template, or every paragraph is
+    # forced into a style that template does not use.
+    filters:
+      - ../assets/normal-style.lua
+    number-sections: false
+    fig-width: {{FIG_WIDTH_DOUBLE}}
+    fig-height: 4
+    fig-dpi: 300
+    fig-align: left
+prefer-html: true
+crossref:
+  fig-title: '**Figure**'
+  tbl-title: '**Table**'
+  title-delim: '**:**'
+execute:
+  echo: false
+  warning: false
+  message: false
+editor_options:
+  chunk_output_type: console
+---
+
+<!--
+The advice sheet is the short public document carrying catch advice to managers. It is quoted
+directly by managers and the press, and it is regenerated each year against a new assessment.
+Two consequences: the section order below is fixed and readers navigate by it, and a stale
+number is a public error.
+
+Every number here is inline R against the summary object the assessment data report saved.
+Nothing is refitted, and nothing is typed. Read the installed `academic-advice-sheet` skill
+and the pack's knowledge/advice.md before editing.
+-->
+
+```{r setup}
+#| include: false
+knitr::opts_knit$set(root.dir = here::here())
+source(here::here("R", "0_setup.R"))
+source(here::here("R", "report_helpers.R"))
+source(here::here("R", "advice_tables.R"))
+source(here::here("R", "ices_plots.R"))
+
+ensure_packages("flextable", "officer", "icesAdvice", "cowplot")
+
+set_advice_table_defaults()
+theme_set(theme_advice(8))
+
+# Word clips a table wider than the text column rather than reflowing it, so figures are
+# sized to the column explicitly too.
+if (identical(knitr::opts_knit$get("rmarkdown.pandoc.to"), "docx")) {
+  knitr::opts_chunk$set(out.width = "6.3in")
+}
+```
+
+```{r release-values}
+#| include: false
+# ── VALUES THAT CHANGE AT RELEASE ────────────────────────────────────────────────────────
+# These cannot be derived from the assessment. They are the annual edit, kept in one place.
+# Leave them as visible placeholders until the working group supplies them: a plausible-looking
+# DOI that resolves to nothing is worse than an obvious blank.
+publication_line <- "Published DD Month YYYY"
+advice_doi       <- "[DOI TO BE ASSIGNED]"
+download_url     <- "https://standardgraphs.ices.dk/stockList.aspx"
+```
+
+```{r advice-values}
+#| include: false
+# Every value the sheet quotes, derived once from the assessment output.
+assessment_year   <- params$assessment_year
+advice_year       <- params$advice_year
+prev_advice_year  <- params$prev_advice_year
+intermediate_year <- assessment_year
+prev_advice_catch <- cfg$PREV_ADVICE_CATCH %||% 0
+
+summary_path <- file.path(
+  output_dir,
+  paste0(cfg$STOCK_SLUG, "_spict_summary_", assessment_year, ".rds")
+)
+if (!file.exists(summary_path)) {
+  stop(
+    "No assessment summary for ", assessment_year, " at ", summary_path,
+    ". Render docs/data-report/spict-assessment/ first.",
+    call. = FALSE
+  )
+}
+spict_summary <- readRDS(summary_path)
+
+# --- Stock status ------------------------------------------------------------------------
+state_df <- as.data.frame(spict_summary$state)
+state_df$Quantity <- rownames(state_df)
+
+f_row <- grepl("/Fmsy$", state_df$Quantity)
+b_row <- grepl("/Bmsy$", state_df$Quantity)
+
+# SPiCT labels the state rows with the fractional year they refer to. The advice text needs
+# the whole year; the footnote needs the fraction.
+sq_yr_decimal <- regmatches(
+  state_df$Quantity[f_row], regexpr("\\d+\\.\\d+", state_df$Quantity[f_row])
+)
+sq_yr_label <- sub(".*_(\\d+).*", "\\1", state_df$Quantity[f_row])
+
+status_quo_F <- state_df$estimate[f_row]
+status_quo_B <- state_df$estimate[b_row]
+
+blim     <- cfg$BLIM_BMSY %||% 0.3
+btrigger <- cfg$BTRIGGER_BMSY %||% 0.5
+
+# Derived rather than written, so the sentence cannot contradict the table beside it.
+f_status <- if (status_quo_F > 1) "above F~MSY~" else "below F~MSY~"
+b_status <- dplyr::case_when(
+  status_quo_B < blim ~ "below B~lim~",
+  status_quo_B < btrigger ~ "below MSY B~trigger~ but above B~lim~",
+  .default = "above MSY B~trigger~"
+)
+
+# --- The advice --------------------------------------------------------------------------
+# Looked up by scenario name. The advice rule is not necessarily row 1, and will not stay
+# row 1 when a scenario is added.
+advice_row <- spict_summary$manTable |>
+  dplyr::filter(stringr::str_detect(Scenario, "ICES advice rule"))
+if (nrow(advice_row) != 1) {
+  stop("Expected exactly one advice-rule scenario; found ", nrow(advice_row), ".", call. = FALSE)
+}
+advised_catch <- round(advice_row$C[1])
+
+sq_row <- spict_summary$manTable |>
+  dplyr::filter(stringr::str_detect(Scenario, "Keep current F"))
+
+sq_catch_intermediate <- spict_summary$summary |>
+  dplyr::filter(year == intermediate_year) |>
+  dplyr::pull(Catch_pred.est) |>
+  round()
+
+last_data_year <- spict_summary$summary |>
+  dplyr::filter(!is.na(total_catch)) |>
+  dplyr::pull(year) |>
+  max() |>
+  floor()
+
+first_data_year <- spict_summary$summary |>
+  dplyr::filter(!is.na(total_catch)) |>
+  dplyr::pull(year) |>
+  min() |>
+  floor()
+
+index_years <- spict_summary$summary |>
+  dplyr::filter(!is.na(index)) |>
+  dplyr::pull(year) |>
+  floor() |>
+  range()
+
+advice_change <- if (prev_advice_catch > 0) {
+  round((advised_catch / prev_advice_catch - 1) * 100)
+} else {
+  NA_real_
+}
+
+landings <- readRDS(file.path(output_dir, paste0(cfg$STOCK_SLUG, "_landings.rds")))
+
+# --- Captions that carry a year ----------------------------------------------------------
+# Built as strings here and referenced with `!expr`, rather than sprintf() inline where a
+# literal % has to be doubled. Note that a !expr caption is evaluated even when its chunk has
+# `eval: false`, so the object must exist by the time the chunk is reached.
+cap_catch_basis <- paste0(
+  "{{STOCK_NAME_SENTENCE}} in ICES subareas {{ICES_AREAS}}. The basis for the catch scenarios in ",
+  advice_year, ". Figures are rounded; the calculations used unrounded inputs."
+)
+cap_catch_scenarios <- paste0(
+  "{{STOCK_NAME_SENTENCE}} in ICES subareas {{ICES_AREAS}}. Annual catch scenarios for ",
+  advice_year, ". Catches are in tonnes."
+)
+cap_advice_history <- paste0(
+  "{{STOCK_NAME_SENTENCE}} in ICES subareas {{ICES_AREAS}}. History of the advice, agreed ",
+  "TAC, and reported catch, in tonnes."
+)
+cap_catch_history <- paste0(
+  "{{STOCK_NAME_SENTENCE}} in ICES subareas {{ICES_AREAS}}. Reported catches by nation, ",
+  first_data_year, "–", last_data_year, ", in tonnes. The most recent year is preliminary."
+)
+```
+
+::: {.callout-warning}
+## Exploratory assessment — not official advice
+
+This sheet reports an **exploratory** SPiCT surplus-production assessment of {{STOCK_NAME}} (*{{STOCK_LATIN}}*) in ICES subareas {{ICES_AREAS}}. It is **not official {{WORKING_GROUP}} advice** and should not be used as such. The official {{WORKING_GROUP_LONG}} ({{WORKING_GROUP}}) assessment for this stock uses `r cfg$OFFICIAL_ASSESSMENT`.
+
+Do not remove or soften this callout. See the pack's `knowledge/constraints.md`.
+:::
+
+# Advice on fishing opportunities
+
+Based on the `r cfg$ADVICE_FRAMEWORK`, catches in `r advice_year` should be no more than **`r fmt(advised_catch)` tonnes**.`r if (!is.na(advice_change)) paste0(" This is ", ifelse(advice_change >= 0, "an increase of ", "a decrease of "), fmt(abs(advice_change)), " % on the advice for ", prev_advice_year, " (", fmt(prev_advice_catch), " tonnes).")`
+
+# Non-fisheries conservation considerations
+
+[VERIFY — conservation aspects and associated management measures may exist at a national or regional level. Say whether they were reviewed, and name them if they were.]
+
+# Stock development over time
+
+Fishing pressure on the stock is estimated to be `r f_status`, and the exploitable stock size `r b_status` (@fig-stock-development).
+
+```{r}
+#| label: fig-stock-development
+#| fig-cap: "{{STOCK_NAME_SENTENCE}} in ICES subareas {{ICES_AREAS}}. Summary of the stock assessment. Top: total catches, in thousand tonnes. Bottom left: relative fishing pressure (F/F~MSY~) with 95 % confidence intervals. Bottom right: relative exploitable biomass (B/B~MSY~) with 95 % confidence intervals. Horizontal lines mark the reference points."
+#| fig-height: 5
+summary_plot(spict_summary, lang = "eng")
+```
+
+# Catch scenarios
+
+```{r}
+#| label: tbl-catch-basis
+#| tbl-cap: !expr cap_catch_basis
+basis_tb <- tibble::tibble(
+  Variable = c(
+    paste0("F", sq_yr_label, "/FMSY"),
+    paste0("B", advice_year, "/BMSY"),
+    paste0("Predicted catch ", intermediate_year, " (tonnes)")
+  ),
+  Value = c(
+    ices_round(status_quo_F),
+    ices_round(sq_row$`B/Bmsy`[1]),
+    fmt(sq_catch_intermediate)
+  ),
+  Notes = c("", "", paste0("SPiCT projection for ", intermediate_year, " at status quo F."))
+)
+
+flextable::flextable(basis_tb) |>
+  flextable::compose(j = "Variable", i = 1, value = ref_point("F", sq_yr_label, over = "F")) |>
+  flextable::compose(j = "Variable", i = 2, value = ref_point("B", advice_year, over = "B")) |>
+  flextable::compose(
+    j = "Notes", i = 1,
+    value = flextable::as_paragraph(
+      "F", flextable::as_sub("sq"), " = status quo fishing mortality (F",
+      flextable::as_sub(sq_yr_decimal), "/F", flextable::as_sub("MSY"), ") applied in ",
+      as.character(intermediate_year), "."
+    )
+  ) |>
+  flextable::compose(
+    j = "Notes", i = 2,
+    value = flextable::as_paragraph(
+      "Short-term forecast after fishing at F", flextable::as_sub("sq"), " in ",
+      as.character(intermediate_year), "."
+    )
+  ) |>
+  ices_ft() |>
+  flextable::align(j = c("Variable", "Value"), align = "center", part = "all") |>
+  flextable::align(j = "Notes", align = "left", part = "all") |>
+  flextable::width(j = "Variable", width = 1.4) |>
+  flextable::width(j = "Value", width = 0.7) |>
+  flextable::width(j = "Notes", width = 4.6) |>
+  fit_ft_page()
+```
+
+{{< pagebreak >}}
+
+```{r}
+#| label: tbl-catch-scenarios
+#| tbl-cap: !expr cap_catch_scenarios
+catch_col   <- paste0("Total catch\n(", advice_year, ")")
+f_col       <- paste0("Fishing mortality\nF", advice_year, "/FMSY")
+b_col       <- paste0("Stock size\nB", advice_year + 1, "/BMSY")
+pct_bio_col <- "% biomass\nchange*"
+pct_adv_col <- "% advice\nchange**"
+
+scenarios <- spict_summary$manTable |>
+  dplyr::select(Scenario, C, `B/Bmsy`, `F/Fmsy`) |>
+  dplyr::mutate(
+    pct_biomass_change = round((`B/Bmsy` / status_quo_B - 1) * 100),
+    pct_advice_change = if (prev_advice_catch > 0) {
+      round((C / prev_advice_catch - 1) * 100)
+    } else {
+      NA_real_
+    },
+    C = round(C),
+    `B/Bmsy` = ices_round(`B/Bmsy`),
+    `F/Fmsy` = ices_round(`F/Fmsy`),
+    Basis = dplyr::case_when(
+      stringr::str_detect(Scenario, "ICES advice rule") ~ "Maximum sustainable yield (MSY) approach",
+      stringr::str_detect(Scenario, "Fish at Fmsy") ~ "F = FMSY",
+      stringr::str_detect(Scenario, "Keep current F") ~ "F = Fsq",
+      stringr::str_detect(Scenario, "No fishing") ~ "F = 0",
+      .default = Scenario
+    ),
+    Basis = factor(
+      Basis,
+      levels = c("Maximum sustainable yield (MSY) approach", "F = FMSY", "F = Fsq", "F = 0")
+    )
+  ) |>
+  dplyr::arrange(Basis) |>
+  dplyr::select(Basis, C, `F/Fmsy`, `B/Bmsy`, pct_biomass_change, pct_advice_change) |>
+  dplyr::rename(
+    !!catch_col := C, !!f_col := `F/Fmsy`, !!b_col := `B/Bmsy`,
+    !!pct_bio_col := pct_biomass_change, !!pct_adv_col := pct_advice_change
+  )
+
+# The table is grouped: the advice basis first, then the other scenarios, each block under a
+# merged, bold, shaded label row.
+group_row <- function(label) {
+  row <- as.list(rep(NA, ncol(scenarios)))
+  names(row) <- names(scenarios)
+  row[["Basis"]] <- label
+  tibble::as_tibble(row)
+}
+
+scenarios_tbl <- dplyr::bind_rows(
+  group_row("Advice basis"),
+  scenarios[1, ],
+  group_row("Other scenarios"),
+  scenarios[-1, ]
+) |>
+  dplyr::mutate(dplyr::across(where(is.numeric), as.character))
+
+grp_rows  <- which(scenarios_tbl$Basis %in% c("Advice basis", "Other scenarios"))
+fmsy_row  <- which(scenarios_tbl$Basis == "F = FMSY")
+fsq_row   <- which(scenarios_tbl$Basis == "F = Fsq")
+
+fn_advice <- if (prev_advice_catch > 0) {
+  paste0("** Advice for ", prev_advice_year, " was ", fmt(prev_advice_catch), " tonnes.")
+} else {
+  paste0("** No advice was given for ", prev_advice_year, "; the change cannot be calculated.")
+}
+
+flextable::flextable(scenarios_tbl) |>
+  flextable::compose(
+    part = "header", j = f_col,
+    value = flextable::as_paragraph(
+      "Fishing mortality\nF", flextable::as_sub(as.character(advice_year)),
+      "/F", flextable::as_sub("MSY")
+    )
+  ) |>
+  flextable::compose(
+    part = "header", j = b_col,
+    value = flextable::as_paragraph(
+      "Stock size\nB", flextable::as_sub(as.character(advice_year + 1)),
+      "/B", flextable::as_sub("MSY")
+    )
+  ) |>
+  flextable::compose(
+    part = "body", j = "Basis", i = fmsy_row,
+    value = flextable::as_paragraph("F = F", flextable::as_sub("MSY"))
+  ) |>
+  flextable::compose(
+    part = "body", j = "Basis", i = fsq_row,
+    value = flextable::as_paragraph("F = F", flextable::as_sub("sq"))
+  ) |>
+  flextable::merge_h(i = grp_rows, part = "body") |>
+  flextable::bold(i = grp_rows, part = "body") |>
+  flextable::bg(i = grp_rows, bg = "#F5F5F5", part = "body") |>
+  flextable::align(i = grp_rows, align = "left", part = "body") |>
+  flextable::colformat_char(j = pct_adv_col, na_str = "–") |>
+  ices_ft() |>
+  flextable::align(j = 2:ncol(scenarios_tbl), align = "center", part = "all") |>
+  flextable::align(j = "Basis", align = "left", part = "all") |>
+  flextable::width(j = "Basis", width = 3.0) |>
+  flextable::width(j = catch_col, width = 0.65) |>
+  flextable::width(j = f_col, width = 0.85) |>
+  flextable::width(j = b_col, width = 0.85) |>
+  flextable::width(j = pct_bio_col, width = 0.65) |>
+  flextable::width(j = pct_adv_col, width = 0.65) |>
+  fit_ft_page() |>
+  flextable::add_footer_lines("") |>
+  flextable::add_footer_lines(fn_advice) |>
+  flextable::compose(
+    part = "footer", i = 1, j = 1,
+    value = flextable::as_paragraph(
+      "* Biomass in ", as.character(advice_year + 1), " relative to biomass in ",
+      as.character(advice_year), " (B", flextable::as_sub(as.character(advice_year)),
+      "/B", flextable::as_sub("MSY"), " = ", ices_round(status_quo_B), ")."
+    )
+  ) |>
+  flextable::fontsize(size = 8, part = "footer") |>
+  flextable::align(align = "left", part = "footer")
+```
+
+# Basis of the advice
+
+```{r}
+#| label: tbl-advice-basis
+#| tbl-cap: "{{STOCK_NAME_SENTENCE}} in ICES subareas {{ICES_AREAS}}. The basis for the advice."
+tibble::tibble(
+  Item = c("Advice basis", "Management plan"),
+  Description = c(
+    paste0(
+      cfg$ADVICE_FRAMEWORK,
+      " — the MSY hockey-stick advice rule with Blim at B/BMSY = ", blim,
+      " and the 35th percentile of the projected catch distribution."
+    ),
+    "[VERIFY — state whether an agreed precautionary management plan exists for this stock, and name it if it does.]"
+  )
+) |>
+  ices_basis_ft()
+```
+
+# Quality of the assessment
+
+```{r}
+#| include: false
+checks <- spict_summary$diagnostics
+failed <- if (is.null(checks)) character() else checks$Check[!checks$Passed]
+```
+
+This is a SPiCT surplus-production assessment [@pedersen2017] fitted to total annual catches (`r first_data_year`–`r last_data_year`) and the `r tolower(cfg$INDEX_NAME)` (`r index_years[1]`–`r index_years[2]`). The model uses a fixed Schaefer production function, informative priors on the initial biomass depletion and the intrinsic growth rate, and a catch observation-error multiplier reflecting how reporting quality changed over the series.
+
+`r if (length(failed) == 0) "The fit passed every acceptance check applied in the assessment." else paste0("The fit did not pass ", spell_number(length(failed)), " of the acceptance checks: ", list_values(failed), ". ")`
+
+[VERIFY — this is where the honest caveats go, and they must not be softened. Say what the assessment does not capture and how much confidence the advised catch carries. Managers are entitled to know. If an acceptance check failed, say what that means for the advice rather than reporting the number without its caveat.]
+
+The advice is derived from a relative-scale model: SPiCT provides no absolute reference points, and the stock status is expressed against B~MSY~ and F~MSY~ as estimated in this assessment. Those estimates change when the assessment is updated.
+
+# Issues relevant for the advice
+
+[VERIFY — replace with this stock's issues, checked against the most recent {{WORKING_GROUP}} assessment report. The list below is a prompt, not a finding.]
+
+- Species identification and mixing in historical catch and survey records.
+- Population structure within the assessed area.
+- Uncertainty in historical catches, and how far back the series can be trusted.
+- Survey availability, coverage, and representativeness for the assessed stock component.
+- Whether discards and recreational catch are inside the catch series or assumed negligible.
+
+# Reference points
+
+```{r}
+#| label: tbl-reference-points
+#| tbl-cap: "{{STOCK_NAME_SENTENCE}} in ICES subareas {{ICES_AREAS}}. Reference points, their values, and their technical basis. The SPiCT model provides reference points on the relative scale only; no absolute reference points are defined."
+ref_tb <- tibble::tibble(
+  Framework = c("MSY approach", "MSY approach", "Precautionary approach"),
+  `Reference point` = c("MSY Btrigger", "FMSY", "Blim"),
+  Value = c(
+    paste0("B/BMSY = ", btrigger), "F/FMSY = 1", paste0("B/BMSY = ", blim)
+  ),
+  `Technical basis` = c(
+    "ICES convention for stocks assessed with SPiCT.",
+    "Estimated directly by the assessment; changes when the assessment is updated.",
+    "ICES convention for stocks assessed with SPiCT."
+  )
+)
+
+flextable::flextable(ref_tb) |>
+  flextable::compose(i = 1, j = "Reference point", value = ref_point("MSY B", "trigger")) |>
+  flextable::compose(i = 2, j = "Reference point", value = ref_point("F", "MSY")) |>
+  flextable::compose(i = 3, j = "Reference point", value = ref_point("B", "lim")) |>
+  flextable::compose(
+    i = 1, j = "Value",
+    value = flextable::as_paragraph("B/B", flextable::as_sub("MSY"), " = ", as.character(btrigger))
+  ) |>
+  flextable::compose(
+    i = 2, j = "Value",
+    value = flextable::as_paragraph("F/F", flextable::as_sub("MSY"), " = 1")
+  ) |>
+  flextable::compose(
+    i = 3, j = "Value",
+    value = flextable::as_paragraph("B/B", flextable::as_sub("MSY"), " = ", as.character(blim))
+  ) |>
+  flextable::merge_at(i = 1:2, j = "Framework") |>
+  ices_ft() |>
+  flextable::align(j = 1:3, align = "center", part = "all") |>
+  flextable::align(j = "Technical basis", align = "left", part = "all") |>
+  flextable::width(j = "Framework", width = 1.15) |>
+  flextable::width(j = "Reference point", width = 1.15) |>
+  flextable::width(j = "Value", width = 1.05) |>
+  flextable::width(j = "Technical basis", width = 3.15) |>
+  fit_ft_page()
+```
+
+# Basis of the assessment
+
+```{r}
+#| label: tbl-assessment-basis
+#| tbl-cap: "{{STOCK_NAME_SENTENCE}} in ICES subareas {{ICES_AREAS}}. Basis of the assessment and the advice."
+tibble::tibble(
+  Item = c(
+    "Stock data category", "Assessment type", "Input data", "Discards",
+    "Other information", "Working group"
+  ),
+  Description = c(
+    "[VERIFY — confirm the ICES stock data category for {{ICES_STOCK_ID}}.]",
+    paste0(
+      "SPiCT surplus-production model (Pedersen and Berg, 2017), spict ",
+      spict_summary$spict_version, ". ",
+      "Exploratory; the official assessment uses ", cfg$OFFICIAL_ASSESSMENT, "."
+    ),
+    paste0(
+      "Total annual catches, ", first_data_year, "–", last_data_year,
+      ". ", cfg$INDEX_NAME, ", ", index_years[1], "–", index_years[2],
+      ", scaled to its own mean."
+    ),
+    "[VERIFY — state whether discards are inside the catch series or assumed negligible.]",
+    "[VERIFY — describe the benchmark and review history for this assessment.]",
+    "{{WORKING_GROUP_LONG}} ({{WORKING_GROUP}})."
+  )
+) |>
+  ices_basis_ft(label_width = 1.84)
+```
+
+## Use of artificial intelligence
+
+This sheet and the assessment behind it were prepared with researcher-supervised generative AI (<!-- EXACT MODEL NAMES AND ROLES, CONFIRMED BY THE RESEARCHER -->). The authors specified and checked the assessment, and reviewed, edited, and approved all AI-assisted content, for which they take full responsibility.
+
+<!--
+Advice sheets have historically carried no AI disclosure. Add one. If a model list already
+exists, APPEND to it — never replace it, and never imply an author approved an unreviewed
+draft. See academic-style/references/ai-disclosure.md.
+-->
+
+# History of the advice, catch, and management
+
+```{r}
+#| label: tbl-advice-history
+#| tbl-cap: !expr cap_advice_history
+
+# ─────────────────────────────────────────────────────────────────────────────────────────
+# THE ANNUAL-UPDATE TASK.
+#
+# The advice text is a historical record and cannot be derived. It is keyed by year here,
+# rather than held in a bare vector, so that a missing year fails loudly instead of silently
+# shifting every row by one. When the assessment year advances, ADD the year's entry. Do not
+# pad, recycle, or shorten the year range to make the lengths match.
+# ─────────────────────────────────────────────────────────────────────────────────────────
+advice_history <- list(
+  # "2024" = list(advice = "…", advised_catch = NA_real_, tac = NA_real_),
+)
+
+advice_start_year <- cfg$ADVICE_HISTORY_FROM %||% (assessment_year - 5)
+history_years <- advice_start_year:advice_year
+
+missing_years <- setdiff(
+  as.character(setdiff(history_years, advice_year)), names(advice_history)
+)
+if (length(missing_years)) {
+  warning(
+    "No advice-history entry for: ", paste(missing_years, collapse = ", "),
+    ". Add them to `advice_history` in the advice sheet."
+  )
+}
+
+pick <- function(year, field) {
+  entry <- advice_history[[as.character(year)]]
+  if (is.null(entry)) return(if (field == "advice") "[VERIFY — advice not recorded]" else NA_real_)
+  entry[[field]]
+}
+
+advice_mgmt <- tibble::tibble(
+  Year = history_years,
+  Advice = vapply(history_years, \(y) as.character(pick(y, "advice")), character(1)),
+  `Catch corresponding\nto advice` = vapply(history_years, \(y) as.numeric(pick(y, "advised_catch")), numeric(1)),
+  `Agreed TAC` = vapply(history_years, \(y) as.numeric(pick(y, "tac")), numeric(1))
+) |>
+  dplyr::mutate(
+    Advice = ifelse(Year == advice_year, paste0(cfg$ADVICE_FRAMEWORK, " (exploratory SPiCT)"), Advice),
+    `Catch corresponding\nto advice` = ifelse(Year == advice_year, advised_catch, `Catch corresponding\nto advice`)
+  ) |>
+  dplyr::left_join(
+    spict_summary$summary |>
+      dplyr::filter(year == round(year)) |>
+      dplyr::transmute(Year = as.integer(floor(year)), Catches = round(total_catch)),
+    by = "Year"
+  )
+
+last_catch_row <- which(advice_mgmt$Year == last_data_year)
+
+ft_history <- flextable::flextable(advice_mgmt) |>
+  flextable::colformat_int(j = "Year", big.mark = "") |>
+  flextable::colformat_double(
+    j = c("Catch corresponding\nto advice", "Agreed TAC", "Catches"),
+    big.mark = " ", digits = 0, na_str = "–"
+  ) |>
+  ices_ft() |>
+  flextable::align(j = "Advice", align = "left", part = "all") |>
+  flextable::align(j = -2, align = "center", part = "all") |>
+  flextable::width(j = "Year", width = 0.45) |>
+  flextable::width(j = "Advice", width = 2.85) |>
+  flextable::width(j = "Catch corresponding\nto advice", width = 1.05) |>
+  flextable::width(j = "Agreed TAC", width = 0.9) |>
+  flextable::width(j = "Catches", width = 1.0) |>
+  fit_ft_page()
+
+if (length(last_catch_row) == 1) {
+  ft_history <- ft_history |>
+    flextable::compose(
+      i = last_catch_row, j = "Catches",
+      value = flextable::as_paragraph(
+        fmt(advice_mgmt$Catches[last_catch_row]), flextable::as_sup("*")
+      )
+    ) |>
+    flextable::add_footer_lines("* Preliminary.") |>
+    flextable::fontsize(size = 8, part = "footer") |>
+    flextable::align(align = "left", part = "footer")
+}
+
+ft_history
+```
+
+{{< pagebreak >}}
+
+```{r}
+#| label: tbl-catch-history
+#| tbl-cap: !expr cap_catch_history
+landings |>
+  dplyr::mutate(
+    Year = ifelse(year == last_data_year, paste0(year, "*"), as.character(year)),
+    .keep = "unused", .before = 1
+  ) |>
+  flextable::flextable() |>
+  flextable::colformat_double(j = -1, big.mark = " ", digits = 0, na_str = "–") |>
+  ices_ft() |>
+  flextable::fontsize(size = 7, part = "all") |>
+  flextable::align(align = "center", part = "all") |>
+  fit_ft_page() |>
+  flextable::add_footer_lines("* Preliminary.") |>
+  flextable::fontsize(size = 7, part = "footer") |>
+  flextable::padding(padding = 1, part = "footer")
+```
+
+{{< pagebreak >}}
+
+# Summary of the assessment
+
+```{r}
+#| label: tbl-assessment-summary
+#| tbl-cap: "{{STOCK_NAME_SENTENCE}} in ICES subareas {{ICES_AREAS}}. Assessment summary: relative exploitable biomass (B/B~MSY~), total catch in tonnes, and relative fishing pressure (F/F~MSY~), each with 95 % confidence intervals."
+assess_tb <- spict_summary$summary |>
+  dplyr::filter(year == round(year), year < advice_year) |>
+  dplyr::transmute(
+    Year = as.integer(floor(year)),
+    `B/BMSY (low)` = round(exp(BBmsy.ll), 2),
+    `B/BMSY` = round(exp(BBmsy.est), 2),
+    `B/BMSY (high)` = round(exp(BBmsy.ul), 2),
+    `Catch (t)` = round(total_catch),
+    `F/FMSY (low)` = dplyr::if_else(Year < assessment_year, round(exp(FFmsy.ll), 2), NA_real_),
+    `F/FMSY` = dplyr::if_else(Year < assessment_year, round(exp(FFmsy.est), 2), NA_real_),
+    `F/FMSY (high)` = dplyr::if_else(Year < assessment_year, round(exp(FFmsy.ul), 2), NA_real_)
+  )
+
+sub_header <- function(ft, col, base, sub, suffix = NULL) {
+  parts <- list(base, flextable::as_sub(sub))
+  if (!is.null(suffix)) parts <- c(parts, list(suffix))
+  flextable::compose(
+    ft, j = col, part = "header",
+    value = do.call(flextable::as_paragraph, parts)
+  )
+}
+
+flextable::flextable(assess_tb) |>
+  flextable::colformat_int(j = 1, big.mark = "") |>
+  flextable::colformat_double(j = 2:4, digits = 2, big.mark = "") |>
+  flextable::colformat_double(j = 5, digits = 0, big.mark = " ") |>
+  flextable::colformat_double(j = 6:8, digits = 2, big.mark = "", na_str = "–") |>
+  sub_header("B/BMSY (low)", "B/B", "MSY", "\n(low)") |>
+  sub_header("B/BMSY", "B/B", "MSY") |>
+  sub_header("B/BMSY (high)", "B/B", "MSY", "\n(high)") |>
+  sub_header("F/FMSY (low)", "F/F", "MSY", "\n(low)") |>
+  sub_header("F/FMSY", "F/F", "MSY") |>
+  sub_header("F/FMSY (high)", "F/F", "MSY", "\n(high)") |>
+  ices_ft() |>
+  flextable::align(align = "center", part = "all") |>
+  fit_ft_page()
+```
+
+{{< pagebreak >}}
+
+# Sources and references
+
+::: {#refs}
+:::
+
+```{r citation-block}
+#| results: asis
+cat(
+  "\n\n**Recommended citation:** {{WORKING_GROUP}}. ", assessment_year,
+  ". {{STOCK_NAME_SENTENCE}} (*{{STOCK_LATIN}}*) in ICES subareas {{ICES_AREAS}}. ",
+  "Exploratory SPiCT assessment, {{ICES_STOCK_ID}}. ", advice_doi, ". ",
+  publication_line, ". Available at <", download_url, ">.\n",
+  sep = ""
+)
+```

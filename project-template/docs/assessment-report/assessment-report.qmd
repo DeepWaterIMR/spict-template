@@ -1,0 +1,273 @@
+---
+subtitle: "Assessment report"
+date: today
+published-title: "Version"
+lang: {{LANGUAGE}}
+bibliography: ../assets/references.bib
+csl: ../assets/ices_jms.csl
+output-file: "{{PROJECT_SLUG}}-assessment-report"
+params:
+  assessment_year: {{ASSESSMENT_YEAR}}   # Year the assessment is carried out
+  advice_year: {{ADVICE_YEAR}}           # Year advice is given for
+  prev_advice_year: {{PREV_ADVICE_YEAR}} # Year advice was last given
+  chapter: "X"                           # The chapter number the working group assigned
+format:
+  html:
+    self-contained: true
+    toc: true
+    toc-depth: 3
+    fig-width: {{FIG_WIDTH_DOUBLE}}
+    fig-height: 4
+  docx:
+    # Pick the body this chapter reports to. All three templates are in docs/assets/:
+    #   ../assets/jrn_afwg_report_template.docx          — JRN-AFWG
+    #   ../assets/ices_scientific_reports_template.docx  — ICES Scientific Reports
+    #   ../assets/nettrapport_template.docx              — internal IMR
+    # The groups reissue their templates; confirm the shipped one is still current.
+    reference-doc: ../assets/jrn_afwg_report_template.docx
+    number-sections: false
+    fig-width: {{FIG_WIDTH_DOUBLE}}
+    fig-height: 4
+    fig-dpi: 300
+    fig-align: left
+prefer-html: true
+crossref:
+  chapters: true
+execute:
+  echo: false
+  warning: false
+  message: false
+editor_options:
+  chunk_output_type: console
+---
+
+<!--
+This is a CHAPTER of a working-group report, so it carries no YAML title: the chapter heading
+below is the title, and the group's template supplies the styles.
+
+Float numbering is the group's, not yours — "Table 6.8", "Figure 6.23" — so `number-sections`
+is false, the assigned number is written into the caption text, and the label slug mirrors it.
+Never renumber a float to match your prose; other chapters cross-reference the group's number.
+All floats sit at the end, under "Tables and figures", in the group's order.
+
+This chapter reports the SELECTED SPiCT run. It does not refit. Read the installed
+`academic-assessment-report` skill and the pack's knowledge/advice.md before editing.
+-->
+
+```{r setup}
+#| include: false
+knitr::opts_knit$set(root.dir = here::here())
+source(here::here("R", "0_setup.R"))
+source(here::here("R", "report_helpers.R"))
+source(here::here("R", "advice_tables.R"))
+source(here::here("R", "ices_plots.R"))
+```
+
+```{r assessment-values}
+#| include: false
+# Every headline number the chapter quotes, derived once from the selected run. A chapter is
+# rewritten each year against a new model run, and a stale number is this document type's
+# classic error.
+assessment_year  <- params$assessment_year
+advice_year      <- params$advice_year
+prev_advice_year <- params$prev_advice_year
+ch <- params$chapter
+
+summary_path <- file.path(
+  output_dir,
+  paste0(cfg$STOCK_SLUG, "_spict_summary_", assessment_year, ".rds")
+)
+if (!file.exists(summary_path)) {
+  stop(
+    "No assessment summary for ", assessment_year, " at ", summary_path,
+    ". Render docs/data-report/spict-assessment/ first.",
+    call. = FALSE
+  )
+}
+spict_summary <- readRDS(summary_path)
+
+catches  <- readRDS(file.path(output_dir, paste0(cfg$STOCK_SLUG, "_catches.rds")))
+landings <- readRDS(file.path(output_dir, paste0(cfg$STOCK_SLUG, "_landings.rds")))
+
+first_data_year <- min(catches$year)
+last_data_year  <- max(catches$year)
+
+index_years <- spict_summary$summary |>
+  dplyr::filter(!is.na(index)) |>
+  dplyr::pull(year) |>
+  floor() |>
+  range()
+
+state_df <- as.data.frame(spict_summary$state)
+state_df$Quantity <- rownames(state_df)
+status_quo_F <- state_df$estimate[grepl("/Fmsy$", state_df$Quantity)]
+status_quo_B <- state_df$estimate[grepl("/Bmsy$", state_df$Quantity)]
+
+blim     <- cfg$BLIM_BMSY %||% 0.3
+btrigger <- cfg$BTRIGGER_BMSY %||% 0.5
+
+f_status <- if (status_quo_F > 1) "above" else "below"
+b_status <- dplyr::case_when(
+  status_quo_B < blim ~ "below B~lim~",
+  status_quo_B < btrigger ~ "below MSY B~trigger~ but above B~lim~",
+  .default = "above MSY B~trigger~"
+)
+
+advised_catch <- spict_summary$manTable |>
+  dplyr::filter(stringr::str_detect(Scenario, "ICES advice rule")) |>
+  dplyr::pull(C) |>
+  round()
+
+checks <- spict_summary$diagnostics
+failed <- if (is.null(checks)) character() else checks$Check[!checks$Passed]
+```
+
+# {{STOCK_NAME_SENTENCE}} (*{{STOCK_LATIN}}*) in ICES subareas {{ICES_AREAS}} — exploratory SPiCT assessment
+
+::: {.callout-warning}
+This chapter reports an **exploratory** SPiCT assessment. It supplements, and does not replace, the official {{WORKING_GROUP}} assessment, which uses `r cfg$OFFICIAL_ASSESSMENT`. Do not remove this notice — see the pack's `knowledge/constraints.md`.
+:::
+
+## Status of the fisheries
+
+Total catches in `r last_data_year` were `r fmt(catches$total[catches$year == last_data_year])` t, against a series mean of `r fmt(mean(catches$total))` t over `r first_data_year`–`r last_data_year` (Table `r ch`.1, Figure `r ch`.1). The most recent year is preliminary.
+
+[VERIFY — describe the fleets, the gears, and the management measures in force in the most recent years. Name what changed since the last assessment.]
+
+## Data used in the assessment
+
+### Catch data
+
+The catch series covers `r first_data_year`–`r last_data_year` and is compiled from the sources recorded in `ai/memory/catch-data-sources.md`. Catches are total catches in tonnes.
+
+[VERIFY — state what changed in the catch data since last year's assessment and why. A revision to a historical year is more consequential than a new year and is easy to leave unmentioned.]
+
+### Survey data
+
+The assessment is driven by the `r tolower(cfg$INDEX_NAME)`, covering `r index_years[1]`–`r index_years[2]`. The index is **relative**, not absolute: SPiCT estimates the catchability that links it to biomass, and only its shape over time carries information.
+
+[VERIFY — name the surveys, the gear, and the area the index covers, and state what effort denominator it uses. See academic-style/references/ecology-fisheries.md.]
+
+### Biological data
+
+SPiCT uses no age or length data. Life-history information enters the assessment only through the prior on the intrinsic growth rate — see @tbl-priors-chapter and `ai/memory/priors.md`.
+
+## Assessment
+
+### Model settings
+
+The model is a Schaefer surplus-production model [@pedersen2017] fitted with spict `r spict_summary$spict_version`. The shape parameter is fixed at the Schaefer value; the index is scaled to its own mean and placed at `r cfg$INDEX_TIMING` of the year; catch observation errors are downweighted before `r cfg$STDEV_HIGH_YEAR` through a linear ramp.
+
+The full model configuration, the priors, and the code that produced them are in the assessment data report (`docs/data-report/spict-assessment/`), which this chapter does not repeat.
+
+### Model diagnostics
+
+`r if (length(failed) == 0) "The fit passed every acceptance check." else paste0("The fit did not pass ", spell_number(length(failed)), " of the acceptance checks: ", list_values(failed), ".")` The checks and their criteria are in Table `r ch`.2.
+
+[VERIFY — where a check failed, say by how much and what it means for the assessment's reliability. This section is what reviewers read first; write it honestly.]
+
+### Assessment results
+
+Exploitable biomass at the end of `r last_data_year` was estimated `r b_status` (B/B~MSY~ = `r round_report(status_quo_B)`), and fishing pressure `r f_status` F~MSY~ (F/F~MSY~ = `r round_report(status_quo_F)`) (Figure `r ch`.2, Table `r ch`.3).
+
+## Comments to the assessment
+
+[VERIFY — what the assessment does not capture, and how much confidence it deserves. A surplus-production model compresses recruitment, growth, and natural mortality into one production function, so a stock whose productivity has changed over the series is represented only approximately. Say whether that matters here.]
+
+## Biological reference points
+
+SPiCT provides reference points on the **relative** scale only. MSY B~trigger~ and B~lim~ are conventions supplied by the advice framework, set at B/B~MSY~ = `r btrigger` and `r blim` following the ICES standard for SPiCT stocks; F~MSY~ is estimated by the model and changes when the assessment is updated (Table `r ch`.4).
+
+[VERIFY — where this stock has absolute reference points from another assessment, state them here with their own source named. Do not imply the SPiCT model produced them.]
+
+## Management advice
+
+Under the `r cfg$ADVICE_FRAMEWORK`, catches in `r advice_year` should be no more than `r fmt(advised_catch)` t (Table `r ch`.5). The full set of catch scenarios and their risk probabilities is in the assessment data report and on the advice sheet.
+
+## Future development of the assessment
+
+[VERIFY — be specific enough that this list can become the next benchmark's issue list. Candidates: recalibrating the priors from this stock's life history rather than a congener's; revisiting the catch-uncertainty breakpoints; testing an alternative index variant; and any acceptance check that failed this year.]
+
+## Software and reproducibility
+
+The assessment was run in `r R.version.string` [@rcoreteam] with spict `r spict_summary$spict_version` [@pedersen2017]. This chapter was compiled with Quarto [@quarto] and rendered by knitr [@knitr], and is reproducible from the saved model output.
+
+This document and the associated analyses were created with researcher-supervised generative AI (<!-- EXACT MODEL NAMES AND ROLES, CONFIRMED BY THE RESEARCHER -->). The authors specified and checked the assessment, and reviewed, edited, and approved all AI-assisted content, for which they take full responsibility.
+
+## References
+
+::: {#refs}
+:::
+
+{{< pagebreak >}}
+
+## Tables and figures
+
+<!--
+Every float goes here, in the working group's order, with the group's assigned number written
+into the caption. The `params$chapter` value stamps the chapter number so a renumbering by the
+group is one parameter change rather than an edit to every caption.
+-->
+
+```{r}
+#| label: tbl-catch-history-chapter
+#| tbl-cap: !expr 'paste0("Table ", ch, ".1. Reported catches by nation, in tonnes. The most recent year is preliminary.")'
+make_table(landings)
+```
+
+```{r}
+#| label: tbl-diagnostics-chapter
+#| tbl-cap: !expr 'paste0("Table ", ch, ".2. Acceptance checks applied to the assessment, their criteria, and the verdict.")'
+if (!is.null(checks)) {
+  make_table(dplyr::mutate(checks, Passed = ifelse(Passed, "Yes", "No")))
+}
+```
+
+```{r}
+#| label: tbl-states-chapter
+#| tbl-cap: !expr 'paste0("Table ", ch, ".3. Estimated stock status at the end of ", last_data_year, ", with 95 % confidence intervals.")'
+spict_summary$state |>
+  as.data.frame() |>
+  tibble::rownames_to_column("Quantity") |>
+  dplyr::mutate(dplyr::across(where(is.numeric), round_report)) |>
+  make_table()
+```
+
+```{r}
+#| label: tbl-priors-chapter
+#| tbl-cap: !expr 'paste0("Table ", ch, ".4. Priors used in the assessment, and the reference points they imply.")'
+if (!is.null(spict_summary$srefpoints)) {
+  spict_summary$srefpoints |>
+    as.data.frame() |>
+    tibble::rownames_to_column("Reference point") |>
+    dplyr::mutate(dplyr::across(where(is.numeric), round_report)) |>
+    make_table()
+}
+```
+
+```{r}
+#| label: tbl-scenarios-chapter
+#| tbl-cap: !expr 'paste0("Table ", ch, ".5. Catch scenarios for ", advice_year, ". Catches in tonnes.")'
+spict_summary$manTable |>
+  dplyr::mutate(dplyr::across(where(is.numeric), round_report)) |>
+  make_table()
+```
+
+```{r}
+#| label: fig-catches-chapter
+#| fig-cap: !expr 'paste0("Figure ", ch, ".1. Reported catches by nation, ", first_data_year, "-", last_data_year, ".")'
+#| fig-height: 4
+landings |>
+  tidyr::pivot_longer(-year, values_drop_na = TRUE) |>
+  ggplot(aes(year, value / 1000, fill = name)) +
+  geom_col() +
+  scale_y_continuous(expand = expansion(c(0, 0.02))) +
+  labs(x = "Year", y = "Catch (kt)", fill = NULL)
+```
+
+```{r}
+#| label: fig-summary-chapter
+#| fig-cap: !expr 'paste0("Figure ", ch, ".2. Stock summary: total catches, relative fishing pressure, and relative exploitable biomass, with 95 % confidence intervals and the reference points.")'
+#| fig-height: 6
+summary_plot(spict_summary)
+```

@@ -1,15 +1,9 @@
-# Memory index
+# MEMORY.md — spict-template development memory
 
-Template-level memories (inherited from `spict-template`, apply to every stock):
+Development memory for **building and maintaining spict-template** — not for generated
+projects, which carry their own `ai/memory/`. One line per file.
 
-- [template_scaffold_interview.md](template_scaffold_interview.md) — **Read first for a fresh scaffold.** Structured interview for an AI agent onboarding a new stock — questions to ask the analyst on identity, catch data, survey indices, and working-group conventions
-- [template_layout.md](template_layout.md) — production/exploration/temp split, canonical year parameters, run_assessment.R contract
-- [template_constraints.md](template_constraints.md) — byte-identical-output rule on `2 advice sheet.qmd`; exploratory-status callouts must stay
-- [template_advice_sheet.md](template_advice_sheet.md) — ICES advice sheet renders to docx/html/pdf; Word template auto-generated from Pandoc default ref via officer+xml2
-- [template_helpers.md](template_helpers.md) — Use `list_values()` from `src/0_setup.R` for inline list enumerations in qmd narrative text
-- [template_make_table.md](template_make_table.md) — `make_table()` PDF caption bug: LaTeX branch must pass `caption=`; fixed 2026-06-03
-- [template_open_items.md](template_open_items.md) — Checklist of stock-specific surfaces every new stock must walk through after scaffolding
-
-Stock-level memories (written by collaborators as work progresses):
-
-- [stock_identity.md](stock_identity.md) — Stock identity for this project (filled by scaffold.R)
+- [architecture.md](architecture.md) — how the pack is organised, and why it overlays academic-writing rather than duplicating it.
+- [reference-sources.md](reference-sources.md) — the assessments this content is distilled from.
+- [conventions.md](conventions.md) — house rules for editing this repo.
+- [spict-conventions-rationale.md](spict-conventions-rationale.md) — why each fixed SPiCT convention exists, and what breaks without it.

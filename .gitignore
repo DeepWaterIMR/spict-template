@@ -1,42 +1,63 @@
-# R / IDE artifacts
+# spict-template holds INSTRUCTIONS ONLY — never data. These rules are a safety net so that
+# catch series, index files, and model output can never be committed by accident. Do not
+# loosen them.
+
+# --- Raw or intermediate data of any kind ---
+*.rds
+*.rda
+*.RData
+*.xlsx
+*.xls
+*.csv
+*.tsv
+*.parquet
+*.feather
+*.gpkg
+*.shp
+*.shx
+*.dbf
+*.prj
+
+# --- Working directories where data or outputs might land. Anchored to the repository root
+#     so the project-template/ skeleton is still committed. ---
+/data/
+/output/
+/outputs/
+/results/
+/private/
+/scratch/
+/logs/
+/review/
+
+# --- Rendered figures and documents ---
+*.png
+*.jpg
+*.jpeg
+*.tif
+*.tiff
+*.pdf
+*.html
+*.docx
+/*_files/
+**/*_files/
+
+# --- Word reference documents and Lua filters are content, not output: they come from
+#     academic-writing and are copied at scaffold time, so none is tracked here. ---
+
+# --- R / RStudio ---
 .Rproj.user/
 .Rhistory
 .RData
 .Ruserdata
 *.Rproj
 
-# OS / editor artifacts
-.DS_Store
-.AppleDouble
-.LSOverride
-Thumbs.db
-ehthumbs.db
-Desktop.ini
-~$*
-
-# Quarto / R Markdown intermediates
-*_cache/
-*_files/
-*.log
-*.rmarkdown
+# --- Quarto ---
+/_site/
 /.quarto/
-**/*.quarto_ipynb
+*.quarto_ipynb
 
-# Large generated outputs
-/data/model_output/saved_models/
-/data/model_output/spict_summaries/
-/docs/model_exploration_reports/*.html
-/docs/model_comparisons/*.html
-
-# Quarto output (except official assessment deliverables)
-*.html
-*.pdf
-*.docx
-!docs/assessment/**/*.html
-!docs/assessment/**/*.pdf
-!docs/assessment/**/*.docx
-!src/documents/advice_template.docx
-
-# Generated figures (drop-zone for assessment plots)
-/figures/*
-!/figures/README.md
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

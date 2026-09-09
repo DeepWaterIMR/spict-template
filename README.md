@@ -1,165 +1,117 @@
-# spict-template
+<!-- badges / logo go here once available -->
 
-A standardized scaffold for **IMR exploratory SPiCT assessments** maintained by
-the Deep-water species and cartilaginous fish group at the Institute of Marine
-Research (Havforskningsinstituttet, Norway). Derived from the `reg-spict`
-(golden redfish) and `reb-spict` (beaked redfish) projects.
+# 🐟 spict-template — Run SPiCT stock assessments with AI agents
 
-> **This is a template repository**, not a runnable assessment. Do not render
-> from this repo — scaffold a new project from it first.
+<!-- version -->
+**Version 0.1.0** (2026-09-09)
+<!-- /version -->
 
-## What you get
+**Teach your AI coding agent to run a biomass-dynamic stock assessment — from catch series to catch advice — for any stock, on your own machine.**
 
-- Production Quarto pipeline: `1 assessment model.qmd` → `2 advice sheet.qmd`,
-  rendered together via `run_assessment.R` with canonical year parameters.
-- Exploration workflow under `src/exploration/` (benchmark fits, side-by-side
-  comparisons, standalone Shiny explorer).
-- ICES advice-sheet Word template auto-generated from Pandoc's default
-  `reference.docx` at render time.
-- A `memory/` folder for **shared, committed, multi-agent project memory** —
-  every collaborator (human or AI) reads and writes here.
-- `AGENTS.md` instructing any LLM on how to participate.
+spict-template is a knowledge pack that turns a general coding agent (Claude Code, Codex, Cursor, Gemini CLI, Mistral, …) into a competent assistant for [**SPiCT**](https://github.com/DTUAqua/spict) assessments — the Surplus Production model in Continuous Time of [Pedersen & Berg (2017)](https://doi.org/10.1111/faf.12174). It is distilled from the `reg-spict` (golden redfish) and `reb-spict` (beaked redfish) assessments of the Deep-water species and cartilaginous fish group at the Institute of Marine Research.
 
-## Scaffolding a new stock project
+Tell your agent which stock you want assessed, and it will:
 
-**This template is designed to be populated with an AI coding agent driving the
-process** (Claude Code, Cursor, Windsurf, ChatGPT in a workspace, etc.), in
-collaboration with the analyst. The agent is responsible for asking the
-analyst the right questions, filling `stock_config.yaml`, running the
-scaffolder, then walking the analyst through the data-onboarding steps and
-the open-items checklist. The full interview protocol lives in
-[`memory/template_scaffold_interview.md`](memory/template_scaffold_interview.md).
+1. **Ask you a structured questionnaire** and confirm a plan.
+2. **Scaffold a project folder** with academic-writing's standard layout (`docs/`, `R/`, `data/`, `figures/`, `ai/`, `logs/`, `config/`).
+3. **Compile the data** — the catch series and the abundance index — and record where every number came from.
+4. **Fit, diagnose, and report** the model, then produce the **working-group chapter** and the **advice sheet**.
 
-### Recommended (agent-driven) flow
+> **It is not a trained model.** Your data never leaves your machine and never enters any model's weights. The agent simply *reads this repo* while it helps you. See [Confidentiality](#-confidentiality).
 
-1. Create the new project on GitHub:
+## ✍️ Built on academic-writing
 
-   ```bash
-   gh repo create DeepWaterIMR/<stock>-spict \
-     --template DeepWaterIMR/spict-template \
-     --private --clone
-   cd <stock>-spict
+spict-template sits **on top of** [academic-writing](https://github.com/DeepWaterIMR/academic-writing). That pack owns the project layout, the scientific writing style, the document conventions, and the rendering pipeline; spict-template adds the **SPiCT assessment** layer. The dependency is real rather than decorative — this pack's `scaffold.R` calls academic-writing's `scaffold_document()` and overlays the SPiCT content on what it produces, so there is exactly one copy of the shared infrastructure. Install it first:
+
+```
+install https://github.com/DeepWaterIMR/academic-writing
+```
+
+## 🚀 Quickstart
+
+1. **Install academic-writing** (if you haven't): `install https://github.com/DeepWaterIMR/academic-writing`.
+2. **Install spict-template:**
    ```
+   install https://github.com/DeepWaterIMR/spict-template
+   ```
+   The agent runs [`spict-install`](skills/spict-install/SKILL.md): check academic-writing → clone spict-template → install the skills globally → verify `spict` compiles.
+3. **Start an assessment:**
+   ```
+   Let's set up the 2026 SPiCT assessment for beaked redfish in ICES subareas 1 and 2,
+   using spict-template.
+   ```
+   The agent runs the questionnaire, plans, scaffolds a project, and drives the workflow.
 
-2. Open the repo in your AI coding tool of choice and ask it:
+> **Manual install:** clone the repo and open your agent in the folder, or point its instructions at `<clone>/skills/`. Nothing here needs a network connection at use time.
 
-   > "Help me scaffold this new SPiCT stock project. Read `AGENTS.md` and
-   > `memory/template_scaffold_interview.md`, then walk me through the
-   > questions."
+## 🗺️ The workflow
 
-   The agent should:
-   - Ask all 11 stock-identity fields (stock code, name, latin name, ICES
-     areas, ICES stock ID, assessment / advice / previous-advice years, first
-     data year, working group).
-   - Write `stock_config.yaml` and run `scaffold.R`.
-   - Ask about **catch data sources** — where do they live, how are they
-     combined, is there a gear breakdown — and rewrite `src/1_process_catches.R`
-     accordingly.
-   - Ask about **survey indices** — including a URL to the index producer repo
-     (at IMR Deep-water this is `DeepWaterIMR/ref-assessment-index`, an
-     internal repository),
-     which split of the indices list to use, and how the `.rds` file gets into
-     `data/indices/`.
-   - Ask about **working-group conventions** — advice framework, reference
-     points, Word template, bibliography.
-   - Record every non-obvious decision as a new file in `memory/`.
+| Step | Skill | Produces |
+|------|-------|----------|
+| Scaffold a project (questionnaire + plan) | [`spict-new-assessment`](skills/spict-new-assessment/SKILL.md) | The project folder and `config.yaml` |
+| **1.** Compile the catches and the index | [`spict-compile-data`](skills/spict-compile-data/SKILL.md) | The two series the model is fitted to |
+| **2.** Fit, diagnose, project | [`spict-fit-model`](skills/spict-fit-model/SKILL.md) | The assessment data report and the summary object |
+| **3.** Explore alternatives *(benchmark)* | [`spict-explore`](skills/spict-explore/SKILL.md) | Candidate fits, comparisons, the Shiny explorer |
+| **4.** The working-group chapter | [`spict-assessment-report`](skills/spict-assessment-report/SKILL.md) | A Word chapter in the group's template |
+| **5.** The advice sheet | [`spict-advice-sheet`](skills/spict-advice-sheet/SKILL.md) | The catch advice |
 
-3. Walk through [`memory/template_open_items.md`](memory/template_open_items.md)
-   with the agent. Every item is a stock-specific surface (priors, narrative
-   prose, gear breakdown, bibliography, advice history) that needs revisiting
-   beyond the mechanical scaffolding step.
+Long renders go through [`spict-render`](skills/spict-render/SKILL.md) — code review first, then a screen session with a log in `logs/`.
 
-### Manual fallback
+**The model is fitted once.** Step 2 saves a small summary object; the chapter and the advice sheet read it rather than refitting, which is what makes all three documents quote the same numbers.
 
-If you'd rather fill the config by hand:
+## 📚 What's in this repo
 
-```yaml
-# stock_config.yaml
-STOCK_CODE:             reb
-STOCK_NAME:             BeakedRedfish
-STOCK_NAME_LOWER_SNAKE: beaked_redfish
-STOCK_LATIN:            Sebastes mentella
-ICES_AREAS:             1, 2
-ICES_STOCK_ID:          reb.27.1-2
-ASSESSMENT_YEAR:        2026
-ADVICE_YEAR:            2027
-PREV_ADVICE_YEAR:       2024
-FIRST_DATA_YEAR:        1987
-WORKING_GROUP:          JRN-AFWG
-```
+- [`AGENTS.md`](AGENTS.md) / [`CLAUDE.md`](CLAUDE.md) — the agent contract.
+- [`skills/`](skills/) — the nine `spict-*` skills, installed globally.
+- [`knowledge/`](knowledge/) — the shared source of truth: [the model conventions](knowledge/spict.md), [catch data](knowledge/catch-data.md), [indices](knowledge/indices.md), [diagnostics](knowledge/diagnostics.md), [advice](knowledge/advice.md), [the hard constraints](knowledge/constraints.md), [project structure](knowledge/project-structure.md), [the academic-writing contract](knowledge/academic-writing.md), [packages](knowledge/packages.md), and [rendering](knowledge/rendering.md).
+- [`project-template/`](project-template/) — the SPiCT layer overlaid onto academic-writing's skeleton.
+- [`scaffold.R`](scaffold.R) — `scaffold_spict()`, which stamps a project from `config.yaml`.
+- [`examples/redfish/`](examples/redfish/) — a worked example.
+- [`config/validate-scaffold.R`](config/validate-scaffold.R) — the structural check.
 
-```r
-source("scaffold.R")
-scaffold("stock_config.yaml")
-```
+## ⚖️ The conventions this pack fixes
 
-Then walk `memory/template_open_items.md` yourself.
+SPiCT is a state-space model fitted to two short series, and most of the ways it goes wrong are silent. These are the pack's conventions, documented in [`knowledge/spict.md`](knowledge/spict.md):
 
-## Repository layout
+- Catches in **tonnes** throughout; the index scaled by its own mean; index timing a fraction of the year matching when the survey runs.
+- **`stdevfac` vectors must average to 1** — they multiply an estimated observation error, so a vector that does not silently rescales it.
+- **`logn` fixed** at the Schaefer value: a production-function shape estimated from one catch series and one index is not identified.
+- **`logalpha` and `logbeta` priors deactivated**, so they do not fight an informative prior on `logsdb`.
+- **Reference points are relative.** SPiCT estimates F~MSY~ and B~MSY~; B~lim~ and MSY B~trigger~ are conventions the advice framework supplies.
+- **Priors carried over from another stock are placeholders, not defaults.**
 
-```text
-.
-├── 1 assessment model.qmd       # production: assessment document
-├── 2 advice sheet.qmd           # production: ICES-format advice sheet
-├── run_assessment.R             # master runner; renders both, copies outputs
-├── scaffold.R                   # template scaffolder (find-replace + memory init)
-├── stock_config.yaml            # per-stock values consumed by scaffold.R
-├── AGENTS.md                    # contract for any LLM working in this repo
-├── CLAUDE.md                    # short pointer to AGENTS.md for Claude Code
-├── memory/                      # shared, committed project memory
-│   ├── README.md                # format spec
-│   ├── MEMORY.md                # index
-│   ├── template_*.md            # inherited from this template
-│   └── stock_identity.md        # written by scaffold.R
-├── data/
-│   ├── catches/                 # per-stock catch processing inputs/outputs
-│   ├── indices/                 # survey indices (.rds)
-│   └── model_output/            # generated, mostly git-ignored
-├── docs/                        # generated outputs (renders)
-└── src/
-    ├── 0_setup.R                # shared bootstrap
-    ├── 1_process_catches.R      # worked example from beaked redfish — rewrite per stock
-    ├── spict_functions.R        # spictRisk()
-    ├── ices_plots.R             # summary_plot()
-    ├── make_table.R             # make_table()
-    ├── documents/               # advice-sheet word template, bib, CSL
-    └── exploration/             # benchmark / sensitivity workflow + Shiny explorer
-```
+Three [hard constraints](knowledge/constraints.md) override tidiness: exploratory-status callouts stay, official-track advice numbers do not change under a cosmetic edit, and advice-history rows are extended rather than fitted.
 
-## Key conventions
+## 🔒 Confidentiality
 
-- **Units**: catches in tonnes throughout.
-- **Survey timing**: `year + 6/12` (June) for SPiCT.
-- **Index scaling**: survey estimates divided by their mean.
-- **`stdevfac` vectors must average to 1**.
-- **`logn` fixed** (Schaefer): `phases$logn <- -1`, `ini$logn <- log(2)`.
-- **`logalpha` / `logbeta` priors deactivated** (`c(0, 0, 0)`).
-- Use the tidyverse pipe `|>`.
-- Format R code with `air` (config in `air.toml`).
+This repo is **public and contains instructions only — never data**:
 
-## Requirements
+- **No data and no private paths** are ever committed here. Catch series, index files, and model output live only in the *project folder the agent generates for you*, where `data/`, `logs/`, `figures/`, and `ai/review/` are git-ignored.
+- Norwegian sales-note data carry confidentiality constraints, and catch data by country or vessel can be commercially sensitive. **Generated projects default to a local Git repository with no remote**; publishing one follows a review of whether the series it contains can be published.
 
-- R 4.5+, Quarto CLI, system libraries for `sf`
-- `src/0_setup.R` installs missing packages on first run
+## 🧰 Siblings
 
-## Maintenance
+- [**academic-writing**](https://github.com/DeepWaterIMR/academic-writing) — scientific writing style, document conventions, the project skeleton. **Required.**
+- [**index-template**](https://github.com/DeepWaterIMR/index-template) — sdmTMB spatiotemporal survey indices. Produces the index a SPiCT assessment consumes.
+- [**BAIT**](https://github.com/DeepWaterIMR/BAIT) — IMR Biotic data access, privacy, maps, life history.
+- [**presentation-template**](https://github.com/DeepWaterIMR/presentation-template) — Quarto RevealJS slides.
 
-Improvements that apply to **all stocks** (helper functions, advice-sheet
-styling, rendering pipeline, conventions) should land back in this template
-repo. Stock-specific narrative, data, and priors stay in the downstream stock
-repos.
+Install whichever you need alongside; the skills stay out of each other's way.
 
-See `AGENTS.md` for the multi-agent collaboration contract and `memory/README.md`
-for the project-memory format.
+## 🚨 You are still in charge
 
-## License
+This repo speeds up the data compilation, the fitting, and the writing. It does not decide what is true, and it does not produce advice that is ready to publish. A scaffolded project is a place to start: the priors are placeholders until someone calibrates them, the diagnostics need judging rather than displaying, and every number in an advice sheet is read by managers. Expert judgment is required throughout, and the humans named as authors are accountable for all of it.
 
-GPL-3, matching `spict` itself. See [`LICENSE`](LICENSE).
+## 📖 References
 
-The bibliography (`src/documents/zotero_library.bib`) ships only the handful of
-references the template's own documents cite. Replace or extend it with your
-stock's sources, and export **without** local `file = {...}` paths.
+Pedersen, M.W. & Berg, C.W. (2017). A stochastic surplus production model in continuous time. *Fish and Fisheries* 18, 226–243. [doi:10.1111/faf.12174](https://doi.org/10.1111/faf.12174).
 
-`src/documents/advice_template.docx` is a styles-only Quarto `reference-doc` —
-heading, table and body styles plus page setup, with no document content.
-Swap in your working group's own template if it has one.
+Mildenberger, T.K., Berg, C.W., Pedersen, M.W., Kokkalis, A. & Nielsen, J.R. (2020). Time-variant productivity in biomass dynamic models on seasonal and long-term scales. *ICES Journal of Marine Science* 77, 174–187. [doi:10.1093/icesjms/fsz154](https://doi.org/10.1093/icesjms/fsz154).
+
+## 🙋 Contributing
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md). Run `Rscript config/validate-scaffold.R` before opening a pull request.
+
+## 📄 Licence
+
+GPL-3, matching `spict` itself. See [`LICENSE`](LICENSE). The Word reference documents and the citation style come from academic-writing at scaffold time and keep their own terms.
