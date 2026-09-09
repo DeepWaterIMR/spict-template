@@ -98,7 +98,7 @@ For CPUE indices:
 
 ### Question C — where does the file come from?
 
-The IMR Deep-water pattern for survey indices is a dedicated producer repo per species, e.g. [`DeepWaterIMR/ref-assessment-index`](https://github.com/DeepWaterIMR/ref-assessment-index) (redfish, sdmTMB-based) and the companion [`DeepWaterIMR/ref-index`](https://github.com/DeepWaterIMR/ref-index). For CPUE-based stocks the producer is more often a logbook-cleaning + standardisation script that lives wherever the analyst keeps it.
+The IMR Deep-water pattern for survey indices is a dedicated producer repo per species, e.g. `DeepWaterIMR/ref-assessment-index` (internal; redfish, sdmTMB-based) and the companion `DeepWaterIMR/ref-index` (internal). For CPUE-based stocks the producer is more often a logbook-cleaning + standardisation script that lives wherever the analyst keeps it.
 
 Ask the analyst for the **URL or path of whatever produces the index for this stock**. If it's a GitHub repo, fetch its README and infer:
 

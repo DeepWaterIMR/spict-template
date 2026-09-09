@@ -56,7 +56,8 @@ the open-items checklist. The full interview protocol lives in
      combined, is there a gear breakdown — and rewrite `src/1_process_catches.R`
      accordingly.
    - Ask about **survey indices** — including a URL to the index producer repo
-     (e.g. [`DeepWaterIMR/ref-assessment-index`](https://github.com/DeepWaterIMR/ref-assessment-index)),
+     (at IMR Deep-water this is `DeepWaterIMR/ref-assessment-index`, an
+     internal repository),
      which split of the indices list to use, and how the `.rds` file gets into
      `data/indices/`.
    - Ask about **working-group conventions** — advice framework, reference
@@ -150,3 +151,15 @@ repos.
 
 See `AGENTS.md` for the multi-agent collaboration contract and `memory/README.md`
 for the project-memory format.
+
+## License
+
+GPL-3, matching `spict` itself. See [`LICENSE`](LICENSE).
+
+The bibliography (`src/documents/zotero_library.bib`) ships only the handful of
+references the template's own documents cite. Replace or extend it with your
+stock's sources, and export **without** local `file = {...}` paths.
+
+`src/documents/advice_template.docx` is a styles-only Quarto `reference-doc` —
+heading, table and body styles plus page setup, with no document content.
+Swap in your working group's own template if it has one.

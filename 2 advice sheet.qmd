@@ -3,9 +3,9 @@ title: ""
 subtitle: ""
 format:
   docx:
-    # TODO: Replace advice_template.docx with the JRN-AFWG-specific Word template
-    # when it becomes available. The current file is an ICES golden redfish template
-    # used as a structural placeholder only.
+    # advice_template.docx is a styles-only Quarto reference-doc (heading,
+    # table and body styles plus page setup; no document content). Replace it
+    # with the working group's own Word template when one is available.
     reference-doc: src/documents/advice_template.docx
     number-sections: false
     fig-width: 6.5

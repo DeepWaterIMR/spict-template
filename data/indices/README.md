@@ -57,8 +57,8 @@ Document the choice in `memory/index_data_sources.md`.
 
 These RDS files are usually produced by a **separate index repo**, not by `spict-template` itself. The IMR Deep-water group's pattern is one index-production repo per species or species group, e.g.:
 
-- [`DeepWaterIMR/ref-assessment-index`](https://github.com/DeepWaterIMR/ref-assessment-index) — survey indices for golden and beaked redfish (sdmTMB-based)
-- [`DeepWaterIMR/ref-index`](https://github.com/DeepWaterIMR/ref-index) — companion manuscript / methodology
+- `DeepWaterIMR/ref-assessment-index` (internal) — survey indices for golden and beaked redfish (sdmTMB-based)
+- `DeepWaterIMR/ref-index` (internal) — companion manuscript / methodology
 
 For CPUE-based stocks the producer might instead be a logbook-cleaning + standardisation script that lives wherever the analyst keeps it; ask.
 
